@@ -1,0 +1,15 @@
+[package]
+name = "substrate-constructor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitvec = {version = "1.0.1", default-features = false, features = ["alloc"]}
+external-memory-tools = {version = "0.1.0", default-features = false}
+frame-metadata = {version = "16.0.0", default-features = false, features = ["current", "decode"]}
+hex = "0.4.3"
+num-bigint = {version = "0.4.3", default-features = false}
+parity-scale-codec = {version = "3.6.9", default-features = false, features = ["derive", "full", "bit-vec"]}
+scale-info = {version = "2.10.0", default-features = false}
+sp-arithmetic = {version = "19.0.0", default-features = false}
+substrate_parser = {git = "https://github.com/Alzymologist/substrate-parser", default-features = false, features = ["embed-display"]}
