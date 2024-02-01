@@ -14,7 +14,7 @@ use substrate_parser::{
     error::RegistryError,
     propagated::{Checker, Propagated, SpecialtySet},
     special_indicators::{SpecialtyTypeHinted, SpecialtyUnsignedInteger},
-    traits::{AsMetadata, ResolveType},
+    traits::{AsCompleteMetadata, ResolveType},
 };
 
 use std::any::TypeId;
@@ -298,7 +298,7 @@ impl TransactionToFill {
     pub fn init<E, M>(ext_memory: &mut E, metadata: &M) -> Result<Self, ErrorFixMe<E, M>>
     where
         E: ExternalMemory,
-        M: AsMetadata<E>,
+        M: AsCompleteMetadata<E>,
     {
         let registry = metadata.types();
         let extrinsic_type_params = metadata.extrinsic_type_params().map_err(ErrorFixMe::MetaStructure)?;
@@ -345,7 +345,7 @@ pub fn prepare_type<E, M>(
 ) -> Result<TypeToFill, RegistryError>
 where
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     let (ty, id) = match ty_input {
         Ty::Resolved(resolved_ty) => (resolved_ty.ty.to_owned(), resolved_ty.id),
@@ -512,7 +512,7 @@ pub fn prepare_fields<E, M>(
 ) -> Result<Vec<FieldToFill>, RegistryError>
 where
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     if fields.len() > 1 {
         // Only single-field structs can be processed as a compact.
@@ -552,7 +552,7 @@ pub fn prepare_elements_set<E, M>(
 ) -> Result<SequenceToFill, RegistryError>
 where
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     propagated.reject_compact()?;
 
@@ -584,7 +584,7 @@ pub fn prepare_bit_sequence<E, M>(
 ) -> Result<BitSequenceToFill, RegistryError>
 where
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     // BitOrder
     let bitorder = find_bit_order_ty::<E, M>(bit_ty, id, ext_memory, registry)?;
@@ -622,7 +622,7 @@ pub fn select_variant<E, M>(
 ) -> Result<VariantSelected, ErrorFixMe<E, M>>
 where
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     let mut found_variant = None;
     for variant in variants.iter() {
