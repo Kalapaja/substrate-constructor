@@ -56,10 +56,7 @@ impl IsReady for TypeContentToFill {
 
 impl IsReady for VariantSelector {
     fn is_ready(&self) -> bool {
-        match &self {
-            VariantSelector::Selected(variant_selected) => variant_selected.is_ready(),
-            VariantSelector::NeedIndex(_) => false,
-        }
+        self.selected.is_ready()
     }
 }
 

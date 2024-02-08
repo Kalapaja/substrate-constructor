@@ -5,7 +5,6 @@ use crate::fill_prepare::{TypeContentToFill, TypeToFill};
 
 pub enum ActionCard {
     SelectIndex,
-    
 }
 
 pub trait CheckFirstEmpty {
@@ -15,14 +14,14 @@ pub trait CheckFirstEmpty {
 impl CheckFirstEmpty for TypeToFill {
     fn first_empty(&self) -> Option<FirstEmpty> {
         match &self.content {
-            TypeContentToFill::Array(array_to_fill) => {},
-            TypeContentToFill::BitSequence(bit_sequence_to_fill) => {},
+            TypeContentToFill::Array(array_to_fill) => {}
+            TypeContentToFill::BitSequence(bit_sequence_to_fill) => {}
             TypeContentToFill::Composite(fields_to_fill) => {}
-            TypeContentToFill::Primitive(primitive_to_fill) => {},
-            TypeContentToFill::Sequence(sequence_to_fill) => {},
-            TypeContentToFill::SpecialType(special_type_to_fill) => {},
+            TypeContentToFill::Primitive(primitive_to_fill) => {}
+            TypeContentToFill::Sequence(sequence_to_fill) => {}
+            TypeContentToFill::SpecialType(special_type_to_fill) => {}
             TypeContentToFill::Tuple(types_to_fill) => {}
-            TypeContentToFill::Variant(variant_selector) => {},
+            TypeContentToFill::Variant(variant_selector) => {}
         }
         None
     }
