@@ -23,6 +23,7 @@ use crate::error::ErrorFixMe;
 
 #[derive(Debug)]
 pub struct VariantSelected {
+    pub selector_index: usize,
     pub docs: String,
     pub fields_to_fill: Vec<FieldToFill>,
     pub index: u8,
@@ -56,9 +57,84 @@ pub enum TypeContentToFill {
 }
 
 #[derive(Debug)]
-pub enum VariantSelector {
-    Selected(VariantSelected),
-    NeedIndex(Vec<Variant<PortableForm>>),
+pub struct VariantSelector {
+    pub available_variants: Vec<Variant<PortableForm>>,
+    pub selected: VariantSelected,
+}
+
+impl VariantSelector {
+    pub fn init<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        variants: &[Variant<PortableForm>],
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) -> Result<Self, RegistryError> {
+        Self::new_at::<E, M>(variants, ext_memory, registry, 0)
+    }
+    pub fn new_at<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        variants: &[Variant<PortableForm>],
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+        selector_index: usize,
+    ) -> Result<Self, RegistryError> {
+        // there are enums with no variants out there; fix this later;
+        // this panics if selector is out of bounds; fix this later too;
+        let variant = &variants[selector_index];
+        let name = variant.name.to_owned();
+        let docs = variant.collect_docs();
+        let fields_to_fill =
+            prepare_fields::<E, M>(&variant.fields, ext_memory, registry, Checker::new())?;
+        let selected = VariantSelected {
+            selector_index,
+            docs,
+            fields_to_fill,
+            index: variant.index,
+            name,
+        };
+        Ok(Self {
+            available_variants: variants.to_owned(),
+            selected,
+        })
+    }
+    pub fn selector_up<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        &mut self,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) -> Result<(), RegistryError> {
+        let new_selector_index = {
+            if self.selected.selector_index + 1 == self.available_variants.len() {
+                0
+            } else {
+                self.selected.selector_index + 1
+            }
+        };
+        *self = VariantSelector::new_at::<E, M>(
+            &self.available_variants,
+            ext_memory,
+            registry,
+            new_selector_index,
+        )?;
+        Ok(())
+    }
+    pub fn selector_down<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        &mut self,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) -> Result<(), RegistryError> {
+        let new_selector_index = {
+            if self.selected.selector_index == 0 {
+                self.available_variants.len() - 1
+            } else {
+                self.selected.selector_index - 1
+            }
+        };
+        *self = VariantSelector::new_at::<E, M>(
+            &self.available_variants,
+            ext_memory,
+            registry,
+            new_selector_index,
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -301,8 +377,12 @@ impl TransactionToFill {
         M: AsCompleteMetadata<E>,
     {
         let registry = metadata.types();
-        let extrinsic_type_params = metadata.extrinsic_type_params().map_err(ErrorFixMe::MetaStructure)?;
-        let signed_extensions = metadata.signed_extensions().map_err(ErrorFixMe::MetaStructure)?;
+        let extrinsic_type_params = metadata
+            .extrinsic_type_params()
+            .map_err(ErrorFixMe::MetaStructure)?;
+        let signed_extensions = metadata
+            .signed_extensions()
+            .map_err(ErrorFixMe::MetaStructure)?;
 
         let call = prepare_type::<E, M>(
             &Ty::Symbol(&extrinsic_type_params.call_ty),
@@ -426,9 +506,11 @@ where
                 info: propagated.info,
             }),
             TypeDef::Variant(x) => Ok(TypeToFill {
-                content: TypeContentToFill::Variant(VariantSelector::NeedIndex(
-                    x.variants.to_vec(),
-                )),
+                content: TypeContentToFill::Variant(VariantSelector::init::<E, M>(
+                    &x.variants,
+                    ext_memory,
+                    registry,
+                )?),
                 info: propagated.info,
             }),
             TypeDef::Sequence(x) => {
@@ -611,39 +693,5 @@ where
             FoundBitOrder::Msb0 => Ok(BitSequenceToFill::BitVecU64Msb0(None)),
         },
         _ => Err(RegistryError::NotBitStoreType { id }),
-    }
-}
-
-pub fn select_variant<E, M>(
-    variants: &[Variant<PortableForm>],
-    index: u8,
-    ext_memory: &mut E,
-    registry: &M::TypeRegistry,
-) -> Result<VariantSelected, ErrorFixMe<E, M>>
-where
-    E: ExternalMemory,
-    M: AsCompleteMetadata<E>,
-{
-    let mut found_variant = None;
-    for variant in variants.iter() {
-        if variant.index == index {
-            found_variant = Some(variant);
-            break;
-        }
-    }
-    match found_variant {
-        Some(variant) => {
-            let name = variant.name.to_owned();
-            let docs = variant.collect_docs();
-            let fields_to_fill =
-                prepare_fields::<E, M>(&variant.fields, ext_memory, registry, Checker::new())?;
-            Ok(VariantSelected {
-                docs,
-                fields_to_fill,
-                index,
-                name,
-            })
-        }
-        None => Err(ErrorFixMe::UnexpectedVariantIndex),
     }
 }
