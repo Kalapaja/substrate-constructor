@@ -164,7 +164,7 @@ impl IsReady for SpecialTypeToFill {
     fn is_ready(&self) -> bool {
         match &self {
             SpecialTypeToFill::AccountId32(a) => a.is_some(),
-            SpecialTypeToFill::Era(a) => a.is_some(),
+            SpecialTypeToFill::Era(_) => true,
             SpecialTypeToFill::PerU16 {
                 value,
                 is_compact: _,
