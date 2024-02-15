@@ -50,6 +50,7 @@ impl IsReady for TypeContentToFill {
                 true
             }
             TypeContentToFill::Variant(variant_selector) => variant_selector.is_ready(),
+            TypeContentToFill::VariantEmpty => true,
         }
     }
 }

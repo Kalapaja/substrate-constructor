@@ -54,6 +54,7 @@ pub enum TypeContentToFill {
     SpecialType(SpecialTypeToFill),
     Tuple(Vec<TypeToFill>),
     Variant(VariantSelector),
+    VariantEmpty,
 }
 
 #[derive(Debug)]
@@ -76,8 +77,7 @@ impl VariantSelector {
         registry: &M::TypeRegistry,
         selector_index: usize,
     ) -> Result<Self, RegistryError> {
-        // there are enums with no variants out there; fix this later;
-        // this panics if selector is out of bounds; fix this later too;
+        // this panics if selector is out of bounds; fix this later;
         let variant = &variants[selector_index];
         let name = variant.name.to_owned();
         let docs = variant.collect_docs();
@@ -523,14 +523,23 @@ where
                 )?),
                 info: propagated.info,
             }),
-            TypeDef::Variant(x) => Ok(TypeToFill {
-                content: TypeContentToFill::Variant(VariantSelector::init::<E, M>(
-                    &x.variants,
-                    ext_memory,
-                    registry,
-                )?),
-                info: propagated.info,
-            }),
+            TypeDef::Variant(x) => {
+                if x.variants.is_empty() {
+                    Ok(TypeToFill {
+                        content: TypeContentToFill::VariantEmpty,
+                        info: propagated.info,
+                    })
+                } else {
+                    Ok(TypeToFill {
+                        content: TypeContentToFill::Variant(VariantSelector::init::<E, M>(
+                            &x.variants,
+                            ext_memory,
+                            registry,
+                        )?),
+                        info: propagated.info,
+                    })
+                }
+            }
             TypeDef::Sequence(x) => {
                 let mut info = Vec::new();
                 info.append(&mut propagated.info);
