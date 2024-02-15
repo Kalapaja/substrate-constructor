@@ -357,17 +357,12 @@ pub fn prepare_primitive(
 }
 
 #[derive(Debug)]
-pub enum MultiAddress {
-    Ed25519(PublicEd25519),
-    Sr25519(PublicSr25519),
-    Ecdsa(PublicEcdsa),
-}
-
-#[derive(Debug)]
 pub struct TransactionToFill {
-    pub author: Option<MultiAddress>,
+    pub author: TypeToFill,
     pub call: TypeToFill,
     pub extensions: Vec<TypeToFill>,
+    pub signature: TypeToFill,
+    pub extra: TypeToFill,
 }
 
 impl TransactionToFill {
@@ -384,8 +379,29 @@ impl TransactionToFill {
             .signed_extensions()
             .map_err(ErrorFixMe::MetaStructure)?;
 
+        let author = prepare_type::<E, M>(
+            &Ty::Symbol(&extrinsic_type_params.address_ty),
+            ext_memory,
+            &registry,
+            Propagated::new(),
+        )?;
+
         let call = prepare_type::<E, M>(
             &Ty::Symbol(&extrinsic_type_params.call_ty),
+            ext_memory,
+            &registry,
+            Propagated::new(),
+        )?;
+
+        let signature = prepare_type::<E, M>(
+            &Ty::Symbol(&extrinsic_type_params.signature_ty),
+            ext_memory,
+            &registry,
+            Propagated::new(),
+        )?;
+
+        let extra = prepare_type::<E, M>(
+            &Ty::Symbol(&extrinsic_type_params.extra_ty),
             ext_memory,
             &registry,
             Propagated::new(),
@@ -410,9 +426,11 @@ impl TransactionToFill {
             )?)
         }
         Ok(TransactionToFill {
-            author: None,
+            author,
             call,
             extensions,
+            signature,
+            extra,
         })
     }
 }
