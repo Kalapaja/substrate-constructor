@@ -14,14 +14,15 @@ pub trait CheckFirstEmpty {
 impl CheckFirstEmpty for TypeToFill {
     fn first_empty(&self) -> Option<FirstEmpty> {
         match &self.content {
-            TypeContentToFill::Array(array_to_fill) => {}
-            TypeContentToFill::BitSequence(bit_sequence_to_fill) => {}
-            TypeContentToFill::Composite(fields_to_fill) => {}
-            TypeContentToFill::Primitive(primitive_to_fill) => {}
-            TypeContentToFill::Sequence(sequence_to_fill) => {}
-            TypeContentToFill::SpecialType(special_type_to_fill) => {}
-            TypeContentToFill::Tuple(types_to_fill) => {}
-            TypeContentToFill::Variant(variant_selector) => {}
+            TypeContentToFill::Array(_array_to_fill) => {}
+            TypeContentToFill::BitSequence(_bit_sequence_to_fill) => {}
+            TypeContentToFill::Composite(_fields_to_fill) => {}
+            TypeContentToFill::Primitive(_primitive_to_fill) => {}
+            TypeContentToFill::Sequence(_sequence_to_fill) => {}
+            TypeContentToFill::SpecialType(_special_type_to_fill) => {}
+            TypeContentToFill::Tuple(_types_to_fill) => {}
+            TypeContentToFill::Variant(_variant_selector) => {}
+            TypeContentToFill::VariantEmpty => {}
         }
         None
     }
