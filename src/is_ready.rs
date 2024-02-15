@@ -10,7 +10,7 @@ pub trait IsReady {
 
 impl IsReady for TransactionToFill {
     fn is_ready(&self) -> bool {
-        if self.author.is_none() {
+        if self.author.content.is_ready() {
             return false;
         }
         if !self.call.content.is_ready() {
