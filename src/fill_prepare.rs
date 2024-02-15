@@ -210,7 +210,7 @@ pub enum SetInProgress {
 #[derive(Debug)]
 pub enum SpecialTypeToFill {
     AccountId32(Option<AccountId32>),
-    Era(Option<Era>),
+    Era(Era),
     PerU16 {
         value: Option<PerU16>,
         is_compact: bool,
@@ -317,7 +317,14 @@ macro_rules! impl_fill_special {
     }
 }
 
-impl_fill_special!(Era, AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
+impl_fill_special!(AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
+
+impl FillSpecial for Era {
+    fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+        specialty_set.reject_compact()?;
+        Ok(SpecialTypeToFill::Era(Era::Immortal))
+    }
+}
 
 macro_rules! impl_fill_special_with_compact {
     ($($ty: tt), *) => {
