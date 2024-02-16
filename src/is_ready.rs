@@ -1,7 +1,8 @@
 use crate::fill_prepare::{
-    ArrayToFill, BitSequenceToFill, FieldToFill, PrimitiveToFill, RegularPrimitiveToFill,
-    SequenceToFill, SetInProgress, SpecialTypeToFill, SpecialtyUnsignedToFill, TransactionToFill,
-    TypeContentToFill, UnsignedToFill, VariantSelected, VariantSelector,
+    ArrayRegularToFill, ArrayU8ToFill, BitSequenceToFill, EraToFill, FieldToFill, PrimitiveToFill,
+    RegularPrimitiveToFill, SequenceRegularToFill, SequenceU8ToFill, SpecialTypeToFill,
+    SpecialtyUnsignedToFill, TransactionToFill, TypeContentToFill, UnsignedToFill, VariantSelected,
+    VariantSelector,
 };
 
 pub trait IsReady {
@@ -28,7 +29,10 @@ impl IsReady for TransactionToFill {
 impl IsReady for TypeContentToFill {
     fn is_ready(&self) -> bool {
         match &self {
-            TypeContentToFill::Array(array_to_fill) => array_to_fill.is_ready(),
+            TypeContentToFill::ArrayU8(array_u8_to_fill) => array_u8_to_fill.is_ready(),
+            TypeContentToFill::ArrayRegular(array_regular_to_fill) => {
+                array_regular_to_fill.is_ready()
+            }
             TypeContentToFill::BitSequence(bit_sequence_to_fill) => bit_sequence_to_fill.is_ready(),
             TypeContentToFill::Composite(fields_to_fill) => {
                 for field in fields_to_fill.iter() {
@@ -39,7 +43,10 @@ impl IsReady for TypeContentToFill {
                 true
             }
             TypeContentToFill::Primitive(primitive_to_fill) => primitive_to_fill.is_ready(),
-            TypeContentToFill::Sequence(sequence_to_fill) => sequence_to_fill.is_ready(),
+            TypeContentToFill::SequenceU8(sequence_u8_to_fill) => sequence_u8_to_fill.is_ready(),
+            TypeContentToFill::SequenceRegular(sequence_regular_to_fill) => {
+                sequence_regular_to_fill.is_ready()
+            }
             TypeContentToFill::SpecialType(special_type_to_fill) => special_type_to_fill.is_ready(),
             TypeContentToFill::Tuple(types_to_fill) => {
                 for ty in types_to_fill.iter() {
@@ -134,29 +141,40 @@ impl IsReady for SpecialtyUnsignedToFill {
     }
 }
 
-impl IsReady for SequenceToFill {
+impl IsReady for SequenceU8ToFill {
     fn is_ready(&self) -> bool {
-        match &self.content {
-            SetInProgress::U8(_) => true,
-            SetInProgress::Regular(a) => {
-                for type_content in a.iter() {
-                    if !type_content.is_ready() {
-                        return false;
-                    }
-                }
-                true
-            }
-        }
+        true
     }
 }
 
-impl IsReady for ArrayToFill {
+impl IsReady for SequenceRegularToFill {
     fn is_ready(&self) -> bool {
-        let actual_len = match &self.sequence.content {
-            SetInProgress::U8(a) => a.len(),
-            SetInProgress::Regular(a) => a.len(),
-        };
-        self.sequence.is_ready() && (actual_len as u32 == self.len)
+        for type_content in self.content.iter() {
+            if !type_content.is_ready() {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl IsReady for ArrayU8ToFill {
+    fn is_ready(&self) -> bool {
+        self.content.len() as u32 == self.len
+    }
+}
+
+impl IsReady for ArrayRegularToFill {
+    fn is_ready(&self) -> bool {
+        if self.content.len() as u32 != self.len {
+            return false;
+        }
+        for type_content in self.content.iter() {
+            if !type_content.is_ready() {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -164,7 +182,10 @@ impl IsReady for SpecialTypeToFill {
     fn is_ready(&self) -> bool {
         match &self {
             SpecialTypeToFill::AccountId32(a) => a.is_some(),
-            SpecialTypeToFill::Era(_) => true,
+            SpecialTypeToFill::Era(era_to_fill) => match era_to_fill {
+                EraToFill::Immortal => true,
+                EraToFill::Mortal { period, phase } => period.is_some() & phase.is_some(),
+            },
             SpecialTypeToFill::PerU16 {
                 value,
                 is_compact: _,
