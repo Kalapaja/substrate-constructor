@@ -8,7 +8,7 @@ use scale_info::{
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use substrate_parser::{
-    additional_types::{AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519},
+    additional_types::{AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519},
     cards::{Documented, Info},
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
     error::RegistryError,
@@ -46,11 +46,13 @@ pub struct TypeToFill {
 
 #[derive(Debug)]
 pub enum TypeContentToFill {
-    Array(ArrayToFill),
+    ArrayU8(ArrayU8ToFill),
+    ArrayRegular(ArrayRegularToFill),
     BitSequence(BitSequenceToFill),
     Composite(Vec<FieldToFill>),
     Primitive(PrimitiveToFill),
-    Sequence(SequenceToFill),
+    SequenceRegular(SequenceRegularToFill),
+    SequenceU8(SequenceU8ToFill),
     SpecialType(SpecialTypeToFill),
     Tuple(Vec<TypeToFill>),
     Variant(VariantSelector),
@@ -188,29 +190,56 @@ pub struct SpecialtyUnsignedToFill {
 }
 
 #[derive(Debug)]
-pub struct SequenceToFill {
-    pub content: SetInProgress,
+pub enum SequenceDraft {
+    U8(SequenceDraftContent),
+    Regular(SequenceDraftContent),
+}
+
+#[derive(Debug)]
+pub struct SequenceDraftContent {
     pub info_element: Vec<Info>,
     pub resolved_ty: ResolvedTy,
     pub checker: Checker,
 }
 
 #[derive(Debug)]
-pub struct ArrayToFill {
-    pub sequence: SequenceToFill,
+pub struct SequenceU8ToFill {
+    pub content: Vec<u8>,
+    pub info_element: Vec<Info>,
+    pub resolved_ty: ResolvedTy,
+    pub checker: Checker,
+}
+
+#[derive(Debug)]
+pub struct SequenceRegularToFill {
+    pub content: Vec<TypeContentToFill>,
+    pub info_element: Vec<Info>,
+    pub resolved_ty: ResolvedTy,
+    pub checker: Checker,
+}
+
+#[derive(Debug)]
+pub struct ArrayU8ToFill {
+    pub content: Vec<u8>,
+    pub info_element: Vec<Info>,
+    pub resolved_ty: ResolvedTy,
+    pub checker: Checker,
     pub len: u32,
 }
 
 #[derive(Debug)]
-pub enum SetInProgress {
-    U8(Vec<u8>),
-    Regular(Vec<TypeContentToFill>),
+pub struct ArrayRegularToFill {
+    pub content: Vec<TypeContentToFill>,
+    pub info_element: Vec<Info>,
+    pub resolved_ty: ResolvedTy,
+    pub checker: Checker,
+    pub len: u32,
 }
 
 #[derive(Debug)]
 pub enum SpecialTypeToFill {
     AccountId32(Option<AccountId32>),
-    Era(Era),
+    Era(EraToFill),
     PerU16 {
         value: Option<PerU16>,
         is_compact: bool,
@@ -234,6 +263,15 @@ pub enum SpecialTypeToFill {
     PublicEd25519(Option<PublicEd25519>),
     PublicSr25519(Option<PublicSr25519>),
     PublicEcdsa(Option<PublicEcdsa>),
+}
+
+#[derive(Debug)]
+pub enum EraToFill {
+    Immortal,
+    Mortal {
+        period: Option<u64>,
+        phase: Option<u64>,
+    },
 }
 
 pub trait FillPrimitive {
@@ -319,10 +357,27 @@ macro_rules! impl_fill_special {
 
 impl_fill_special!(AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
 
-impl FillSpecial for Era {
+impl FillSpecial for EraToFill {
     fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
         specialty_set.reject_compact()?;
-        Ok(SpecialTypeToFill::Era(Era::Immortal))
+        Ok(SpecialTypeToFill::Era(EraToFill::Immortal))
+    }
+}
+
+impl EraToFill {
+    pub fn selector(&mut self) {
+        match &self {
+            EraToFill::Immortal => {
+                *self = EraToFill::Mortal {
+                    period: None,
+                    phase: None,
+                }
+            }
+            EraToFill::Mortal {
+                period: _,
+                phase: _,
+            } => *self = EraToFill::Immortal,
+        }
     }
 }
 
@@ -467,7 +522,7 @@ where
             info: propagated.info,
         }),
         SpecialtyTypeHinted::Era => Ok(TypeToFill {
-            content: TypeContentToFill::SpecialType(Era::special_to_fill(
+            content: TypeContentToFill::SpecialType(EraToFill::special_to_fill(
                 &propagated.checker.specialty_set,
             )?),
             info: propagated.info,
@@ -550,25 +605,56 @@ where
             TypeDef::Sequence(x) => {
                 let mut info = Vec::new();
                 info.append(&mut propagated.info);
-                let sequence_to_fill =
+                let sequence_draft =
                     prepare_elements_set::<E, M>(&x.type_param, ext_memory, registry, propagated)?;
-                Ok(TypeToFill {
-                    content: TypeContentToFill::Sequence(sequence_to_fill),
-                    info,
-                })
+                match sequence_draft {
+                    SequenceDraft::U8(sequence_draft_content) => Ok(TypeToFill {
+                        content: TypeContentToFill::SequenceU8(SequenceU8ToFill {
+                            content: Vec::new(),
+                            info_element: sequence_draft_content.info_element,
+                            resolved_ty: sequence_draft_content.resolved_ty,
+                            checker: sequence_draft_content.checker,
+                        }),
+                        info,
+                    }),
+                    SequenceDraft::Regular(sequence_draft_content) => Ok(TypeToFill {
+                        content: TypeContentToFill::SequenceRegular(SequenceRegularToFill {
+                            content: Vec::new(),
+                            info_element: sequence_draft_content.info_element,
+                            resolved_ty: sequence_draft_content.resolved_ty,
+                            checker: sequence_draft_content.checker,
+                        }),
+                        info,
+                    }),
+                }
             }
             TypeDef::Array(x) => {
                 let mut info = Vec::new();
                 info.append(&mut propagated.info);
-                let sequence_to_fill =
+                let sequence_draft =
                     prepare_elements_set::<E, M>(&x.type_param, ext_memory, registry, propagated)?;
-                Ok(TypeToFill {
-                    content: TypeContentToFill::Array(ArrayToFill {
-                        sequence: sequence_to_fill,
-                        len: x.len,
+                match sequence_draft {
+                    SequenceDraft::U8(sequence_draft_content) => Ok(TypeToFill {
+                        content: TypeContentToFill::ArrayU8(ArrayU8ToFill {
+                            content: Vec::new(),
+                            info_element: sequence_draft_content.info_element,
+                            resolved_ty: sequence_draft_content.resolved_ty,
+                            checker: sequence_draft_content.checker,
+                            len: x.len,
+                        }),
+                        info,
                     }),
-                    info,
-                })
+                    SequenceDraft::Regular(sequence_draft_content) => Ok(TypeToFill {
+                        content: TypeContentToFill::ArrayRegular(ArrayRegularToFill {
+                            content: Vec::new(),
+                            info_element: sequence_draft_content.info_element,
+                            resolved_ty: sequence_draft_content.resolved_ty,
+                            checker: sequence_draft_content.checker,
+                            len: x.len,
+                        }),
+                        info,
+                    }),
+                }
             }
             TypeDef::Tuple(x) => {
                 if x.fields.len() > 1 {
@@ -665,7 +751,7 @@ pub fn prepare_elements_set<E, M>(
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
     propagated: Propagated,
-) -> Result<SequenceToFill, RegistryError>
+) -> Result<SequenceDraft, RegistryError>
 where
     E: ExternalMemory,
     M: AsCompleteMetadata<E>,
@@ -677,19 +763,16 @@ where
         ty: husked.ty.to_owned(),
         id: husked.id,
     };
-    let content = {
-        if husked.ty.type_def == TypeDef::Primitive(TypeDefPrimitive::U8) {
-            SetInProgress::U8(Vec::new())
-        } else {
-            SetInProgress::Regular(Vec::new())
-        }
-    };
-    Ok(SequenceToFill {
-        content,
+    let sequence_draft_content = SequenceDraftContent {
         info_element: husked.info.to_owned(),
         resolved_ty,
         checker: husked.checker,
-    })
+    };
+    if husked.ty.type_def == TypeDef::Primitive(TypeDefPrimitive::U8) {
+        Ok(SequenceDraft::U8(sequence_draft_content))
+    } else {
+        Ok(SequenceDraft::Regular(sequence_draft_content))
+    }
 }
 
 pub fn prepare_bit_sequence<E, M>(
