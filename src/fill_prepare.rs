@@ -2,6 +2,7 @@ use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use external_memory_tools::ExternalMemory;
 use num_bigint::{BigInt, BigUint};
 //use parity_scale_codec::{Compact, Encode};
+use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, TypeDef, TypeDefBitSequence,
     TypeDefPrimitive, Variant,
@@ -13,7 +14,7 @@ use substrate_parser::{
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
     error::RegistryError,
     propagated::{Checker, Propagated, SpecialtySet},
-    special_indicators::{SpecialtyTypeHinted, SpecialtyUnsignedInteger},
+    special_indicators::{SpecialtyH256, SpecialtyTypeHinted, SpecialtyUnsignedInteger},
     traits::{AsCompleteMetadata, ResolveType},
 };
 
@@ -240,6 +241,7 @@ pub struct ArrayRegularToFill {
 pub enum SpecialTypeToFill {
     AccountId32(Option<AccountId32>),
     Era(EraToFill),
+    H256(H256ToFill),
     PerU16 {
         value: Option<PerU16>,
         is_compact: bool,
@@ -263,6 +265,12 @@ pub enum SpecialTypeToFill {
     PublicEd25519(Option<PublicEd25519>),
     PublicSr25519(Option<PublicSr25519>),
     PublicEcdsa(Option<PublicEcdsa>),
+}
+
+#[derive(Debug)]
+pub struct H256ToFill {
+    pub hash: Option<H256>,
+    pub specialty: SpecialtyH256,
 }
 
 #[derive(Debug)]
@@ -378,6 +386,17 @@ impl EraToFill {
                 phase: _,
             } => *self = EraToFill::Immortal,
         }
+    }
+}
+
+impl FillSpecial for H256ToFill {
+    fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+        specialty_set.reject_compact()?;
+        let specialty = specialty_set.hint.hash256();
+        Ok(SpecialTypeToFill::H256(H256ToFill {
+            hash: None,
+            specialty,
+        }))
     }
 }
 
@@ -523,6 +542,12 @@ where
         }),
         SpecialtyTypeHinted::Era => Ok(TypeToFill {
             content: TypeContentToFill::SpecialType(EraToFill::special_to_fill(
+                &propagated.checker.specialty_set,
+            )?),
+            info: propagated.info,
+        }),
+        SpecialtyTypeHinted::H256 => Ok(TypeToFill {
+            content: TypeContentToFill::SpecialType(H256ToFill::special_to_fill(
                 &propagated.checker.specialty_set,
             )?),
             info: propagated.info,
