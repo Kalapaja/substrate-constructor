@@ -12,15 +12,15 @@ use substrate_parser::{
     additional_types::{AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519},
     cards::{Documented, Info},
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
-    error::RegistryError,
+    error::{ExtensionsError, RegistryError},
     propagated::{Checker, Propagated, SpecialtySet},
     special_indicators::{SpecialtyH256, SpecialtyTypeHinted, SpecialtyUnsignedInteger},
-    traits::{AsCompleteMetadata, ResolveType},
+    traits::{AsCompleteMetadata, ResolveType, SpecNameVersion},
 };
 
 use std::any::TypeId;
 
-use crate::error::ErrorFixMe;
+use crate::{error::ErrorFixMe, try_fill::TryFill};
 
 #[derive(Debug)]
 pub struct VariantSelected {
@@ -447,7 +447,11 @@ pub struct TransactionToFill {
 }
 
 impl TransactionToFill {
-    pub fn init<E, M>(ext_memory: &mut E, metadata: &M) -> Result<Self, ErrorFixMe<E, M>>
+    pub fn init<E, M>(
+        ext_memory: &mut E,
+        metadata: &M,
+        genesis_hash: H256,
+    ) -> Result<Self, ErrorFixMe<E, M>>
     where
         E: ExternalMemory,
         M: AsCompleteMetadata<E>,
@@ -506,14 +510,294 @@ impl TransactionToFill {
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )?)
         }
-        Ok(TransactionToFill {
+        check_extensions(&extensions).map_err(ErrorFixMe::ExtensionsList)?;
+        let mut out = TransactionToFill {
             author,
             call,
             extensions,
             signature,
             extra,
-        })
+        };
+        out.populate_genesis_hash(genesis_hash);
+        out.populate_spec_version(
+            &metadata
+                .spec_name_version()
+                .map_err(ErrorFixMe::MetaStructure)?,
+        );
+        Ok(out)
     }
+
+    pub fn populate_genesis_hash(&mut self, genesis_hash: H256) {
+        for extension in self.extensions.iter_mut() {
+            if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256(ref mut hash_to_fill)) =
+                extension.content
+            {
+                if let SpecialtyH256::GenesisHash = hash_to_fill.specialty {
+                    hash_to_fill.hash = Some(genesis_hash);
+                    break;
+                }
+            }
+            if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
+                if fields_to_fill.len() == 1 {
+                    if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256(
+                        ref mut hash_to_fill,
+                    )) = fields_to_fill[0].type_to_fill.content
+                    {
+                        if let SpecialtyH256::GenesisHash = hash_to_fill.specialty {
+                            hash_to_fill.hash = Some(genesis_hash);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn populate_block_hash(&mut self, genesis_hash: H256, block_hash: H256) {
+        let mut era_is_immortal = true;
+        for extension in self.extensions.iter() {
+            if let TypeContentToFill::SpecialType(SpecialTypeToFill::Era(era_to_fill)) =
+                &extension.content
+            {
+                if let EraToFill::Mortal { .. } = era_to_fill {
+                    era_is_immortal = false;
+                }
+                break;
+            }
+            if let TypeContentToFill::Composite(fields_to_fill) = &extension.content {
+                if fields_to_fill.len() == 1 {
+                    if let TypeContentToFill::SpecialType(SpecialTypeToFill::Era(era_to_fill)) =
+                        &fields_to_fill[0].type_to_fill.content
+                    {
+                        if let EraToFill::Mortal { .. } = era_to_fill {
+                            era_is_immortal = false;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        for extension in self.extensions.iter_mut() {
+            if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256(ref mut hash_to_fill)) =
+                extension.content
+            {
+                if let SpecialtyH256::BlockHash = hash_to_fill.specialty {
+                    if era_is_immortal {
+                        hash_to_fill.hash = Some(genesis_hash)
+                    } else {
+                        hash_to_fill.hash = Some(block_hash)
+                    }
+                    break;
+                }
+            }
+            if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
+                if fields_to_fill.len() == 1 {
+                    if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256(
+                        ref mut hash_to_fill,
+                    )) = fields_to_fill[0].type_to_fill.content
+                    {
+                        if let SpecialtyH256::BlockHash = hash_to_fill.specialty {
+                            if era_is_immortal {
+                                hash_to_fill.hash = Some(genesis_hash)
+                            } else {
+                                hash_to_fill.hash = Some(block_hash)
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn populate_spec_version(&mut self, spec_name_version: &SpecNameVersion) {
+        for extension in self.extensions.iter_mut() {
+            match extension.content {
+                TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                    ref mut specialty_unsigned_to_fill,
+                )) => {
+                    if let SpecialtyUnsignedInteger::SpecVersion =
+                        specialty_unsigned_to_fill.specialty
+                    {
+                        specialty_unsigned_to_fill
+                            .content
+                            .upd_from_str(&spec_name_version.printed_spec_version);
+                        break;
+                    }
+                }
+                TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                    ref mut specialty_unsigned_to_fill,
+                )) => {
+                    if let SpecialtyUnsignedInteger::SpecVersion =
+                        specialty_unsigned_to_fill.specialty
+                    {
+                        specialty_unsigned_to_fill
+                            .content
+                            .upd_from_str(&spec_name_version.printed_spec_version);
+                        break;
+                    }
+                }
+                TypeContentToFill::Composite(ref mut fields_to_fill) => {
+                    if fields_to_fill.len() == 1 {
+                        match fields_to_fill[0].type_to_fill.content {
+                            TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                                ref mut specialty_unsigned_to_fill,
+                            )) => {
+                                if let SpecialtyUnsignedInteger::SpecVersion =
+                                    specialty_unsigned_to_fill.specialty
+                                {
+                                    specialty_unsigned_to_fill
+                                        .content
+                                        .upd_from_str(&spec_name_version.printed_spec_version);
+                                    break;
+                                }
+                            }
+                            TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                                ref mut specialty_unsigned_to_fill,
+                            )) => {
+                                if let SpecialtyUnsignedInteger::SpecVersion =
+                                    specialty_unsigned_to_fill.specialty
+                                {
+                                    specialty_unsigned_to_fill
+                                        .content
+                                        .upd_from_str(&spec_name_version.printed_spec_version);
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn check_extensions(extensions: &[TypeToFill]) -> Result<(), ExtensionsError> {
+    let mut found_era = false;
+    let mut found_genesis_hash = false;
+    let mut found_block_hash = false;
+    let mut found_spec_version = false;
+    for ext in extensions.iter() {
+        match &ext.content {
+            TypeContentToFill::SpecialType(SpecialTypeToFill::Era(_)) => {
+                if found_era {
+                    return Err(ExtensionsError::EraTwice);
+                } else {
+                    found_era = true;
+                }
+            }
+            TypeContentToFill::SpecialType(SpecialTypeToFill::H256(h256_to_fill)) => {
+                match h256_to_fill.specialty {
+                    SpecialtyH256::BlockHash => {
+                        if found_block_hash {
+                            return Err(ExtensionsError::GenesisHashTwice);
+                        } else {
+                            found_block_hash = true;
+                        }
+                    }
+                    SpecialtyH256::GenesisHash => {
+                        if found_genesis_hash {
+                            return Err(ExtensionsError::GenesisHashTwice);
+                        } else {
+                            found_genesis_hash = true;
+                        }
+                    }
+                    SpecialtyH256::None => {}
+                }
+            }
+            TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                specialty_unsigned_to_fill,
+            )) => {
+                if let SpecialtyUnsignedInteger::SpecVersion = specialty_unsigned_to_fill.specialty
+                {
+                    if found_spec_version {
+                        return Err(ExtensionsError::SpecVersionTwice);
+                    } else {
+                        found_spec_version = true;
+                    }
+                }
+            }
+            TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(specialty_unsigned_to_fill)) => {
+                if let SpecialtyUnsignedInteger::SpecVersion = specialty_unsigned_to_fill.specialty
+                {
+                    if found_spec_version {
+                        return Err(ExtensionsError::SpecVersionTwice);
+                    } else {
+                        found_spec_version = true;
+                    }
+                }
+            }
+            TypeContentToFill::Composite(fields_to_fill) => {
+                if fields_to_fill.len() == 1 {
+                    match &fields_to_fill[0].type_to_fill.content {
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::Era(_)) => {
+                            if found_era {
+                                return Err(ExtensionsError::EraTwice);
+                            } else {
+                                found_era = true;
+                            }
+                        }
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::H256(h256_to_fill)) => {
+                            match h256_to_fill.specialty {
+                                SpecialtyH256::BlockHash => {
+                                    if found_block_hash {
+                                        return Err(ExtensionsError::GenesisHashTwice);
+                                    } else {
+                                        found_block_hash = true;
+                                    }
+                                }
+                                SpecialtyH256::GenesisHash => {
+                                    if found_genesis_hash {
+                                        return Err(ExtensionsError::GenesisHashTwice);
+                                    } else {
+                                        found_genesis_hash = true;
+                                    }
+                                }
+                                SpecialtyH256::None => {}
+                            }
+                        }
+                        TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                            specialty_unsigned_to_fill,
+                        )) => {
+                            if let SpecialtyUnsignedInteger::SpecVersion =
+                                specialty_unsigned_to_fill.specialty
+                            {
+                                if found_spec_version {
+                                    return Err(ExtensionsError::SpecVersionTwice);
+                                } else {
+                                    found_spec_version = true;
+                                }
+                            }
+                        }
+                        TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                            specialty_unsigned_to_fill,
+                        )) => {
+                            if let SpecialtyUnsignedInteger::SpecVersion =
+                                specialty_unsigned_to_fill.specialty
+                            {
+                                if found_spec_version {
+                                    return Err(ExtensionsError::SpecVersionTwice);
+                                } else {
+                                    found_spec_version = true;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !found_genesis_hash {
+        return Err(ExtensionsError::NoGenesisHash);
+    }
+    if !found_spec_version {
+        return Err(ExtensionsError::NoSpecVersion);
+    }
+    Ok(())
 }
 
 pub fn prepare_type<E, M>(

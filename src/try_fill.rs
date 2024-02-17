@@ -2,8 +2,10 @@ use std::str::FromStr;
 
 use num_bigint::{BigInt, BigUint};
 
+use primitive_types::H256;
+
 use crate::fill_prepare::{
-    ArrayU8ToFill, RegularPrimitiveToFill, SequenceU8ToFill, UnsignedToFill,
+    ArrayU8ToFill, H256ToFill, RegularPrimitiveToFill, SequenceU8ToFill, UnsignedToFill,
 };
 
 pub trait TryFill {
@@ -90,6 +92,16 @@ impl TryFill for RegularPrimitiveToFill {
                 if let Ok(value) = BigUint::from_str(source) {
                     *old_value = Some(value)
                 }
+            }
+        }
+    }
+}
+
+impl TryFill for H256ToFill {
+    fn upd_from_str(&mut self, source: &str) {
+        if let Ok(value) = hex::decode(source) {
+            if let Ok(hash) = value.try_into() {
+                self.hash = Some(H256(hash))
             }
         }
     }

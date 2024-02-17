@@ -1,8 +1,12 @@
 use external_memory_tools::ExternalMemory;
-use substrate_parser::{error::RegistryError, traits::AsMetadata};
+use substrate_parser::{
+    error::{ExtensionsError, RegistryError},
+    traits::AsMetadata,
+};
 
 #[derive(Debug)]
 pub enum ErrorFixMe<E: ExternalMemory, M: AsMetadata<E>> {
+    ExtensionsList(ExtensionsError),
     MetaStructure(M::MetaStructureError),
     Registry(RegistryError),
     UnexpectedVariantIndex,
