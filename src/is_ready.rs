@@ -186,6 +186,7 @@ impl IsReady for SpecialTypeToFill {
                 EraToFill::Immortal => true,
                 EraToFill::Mortal { period, phase } => period.is_some() & phase.is_some(),
             },
+            SpecialTypeToFill::H256(h256_to_fill) => h256_to_fill.hash.is_some(),
             SpecialTypeToFill::PerU16 {
                 value,
                 is_compact: _,
