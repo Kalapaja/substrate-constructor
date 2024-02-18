@@ -4,7 +4,7 @@ use num_bigint::{BigInt, BigUint};
 //use parity_scale_codec::{Compact, Encode};
 use primitive_types::H256;
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, TypeDef, TypeDefBitSequence,
+    form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
     TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
@@ -207,24 +207,58 @@ pub struct SequenceDraftContent {
 pub struct SequenceU8ToFill {
     pub content: Vec<u8>,
     pub info_element: Vec<Info>,
-    pub resolved_ty: ResolvedTy,
-    pub checker: Checker,
 }
 
 #[derive(Debug)]
 pub struct SequenceRegularToFill {
     pub content: Vec<TypeContentToFill>,
     pub info_element: Vec<Info>,
-    pub resolved_ty: ResolvedTy,
-    pub checker: Checker,
+    pub ty: Type<PortableForm>,
+    pub id: u32,
+}
+
+impl SequenceRegularToFill {
+    pub fn remove_last_element(&mut self) {
+        self.content.pop();
+    }
+    pub fn add_new_element<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        &mut self,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) -> Result<(), RegistryError> {
+        let element = prepare_type::<E, M>(
+            &Ty::Resolved(ResolvedTy {
+                ty: self.ty.to_owned(),
+                id: self.id,
+            }),
+            ext_memory,
+            registry,
+            Propagated::new(),
+        )?;
+        self.content.push(element.content);
+        Ok(())
+    }
+    pub fn set_number_of_elements<E: ExternalMemory, M: AsCompleteMetadata<E>>(
+        &mut self,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+        number_of_elements: usize,
+    ) -> Result<(), RegistryError> {
+        if self.content.len() <= number_of_elements {
+            for _i in 0..number_of_elements - self.content.len() {
+                self.add_new_element::<E, M>(ext_memory, registry)?;
+            }
+        } else {
+            self.content.truncate(number_of_elements);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct ArrayU8ToFill {
     pub content: Vec<u8>,
     pub info_element: Vec<Info>,
-    pub resolved_ty: ResolvedTy,
-    pub checker: Checker,
     pub len: u32,
 }
 
@@ -232,8 +266,8 @@ pub struct ArrayU8ToFill {
 pub struct ArrayRegularToFill {
     pub content: Vec<TypeContentToFill>,
     pub info_element: Vec<Info>,
-    pub resolved_ty: ResolvedTy,
-    pub checker: Checker,
+    pub ty: Type<PortableForm>,
+    pub id: u32,
     pub len: u32,
 }
 
@@ -921,8 +955,6 @@ where
                         content: TypeContentToFill::SequenceU8(SequenceU8ToFill {
                             content: Vec::new(),
                             info_element: sequence_draft_content.info_element,
-                            resolved_ty: sequence_draft_content.resolved_ty,
-                            checker: sequence_draft_content.checker,
                         }),
                         info,
                     }),
@@ -930,8 +962,8 @@ where
                         content: TypeContentToFill::SequenceRegular(SequenceRegularToFill {
                             content: Vec::new(),
                             info_element: sequence_draft_content.info_element,
-                            resolved_ty: sequence_draft_content.resolved_ty,
-                            checker: sequence_draft_content.checker,
+                            ty: sequence_draft_content.resolved_ty.ty,
+                            id: sequence_draft_content.resolved_ty.id,
                         }),
                         info,
                     }),
@@ -947,8 +979,6 @@ where
                         content: TypeContentToFill::ArrayU8(ArrayU8ToFill {
                             content: Vec::new(),
                             info_element: sequence_draft_content.info_element,
-                            resolved_ty: sequence_draft_content.resolved_ty,
-                            checker: sequence_draft_content.checker,
                             len: x.len,
                         }),
                         info,
@@ -957,8 +987,8 @@ where
                         content: TypeContentToFill::ArrayRegular(ArrayRegularToFill {
                             content: Vec::new(),
                             info_element: sequence_draft_content.info_element,
-                            resolved_ty: sequence_draft_content.resolved_ty,
-                            checker: sequence_draft_content.checker,
+                            ty: sequence_draft_content.resolved_ty.ty,
+                            id: sequence_draft_content.resolved_ty.id,
                             len: x.len,
                         }),
                         info,
