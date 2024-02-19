@@ -1,19 +1,16 @@
-use std::any::TypeId;
-
 use external_memory_tools::ExternalMemory;
-use frame_metadata::{
-    v14::{PalletMetadata as PalletMetadataV14, RuntimeMetadataV14},
-    v15::{PalletMetadata as PalletMetadataV15, RuntimeMetadataV15},
-};
-use scale_info::{form::PortableForm, interner::UntrackedSymbol};
+use frame_metadata::{v14::RuntimeMetadataV14, v15::RuntimeMetadataV15};
 use substrate_parser::{
     cards::ParsedData,
     decode_all_as_type,
     error::{MetaStructureErrorV14, MetaVersionErrorPallets},
     special_indicators::SpecialtyUnsignedInteger,
-    traits::AsCompleteMetadata,
+    traits::{
+        version_constant_data_and_ty_v14, version_constant_data_and_ty_v15, AsCompleteMetadata,
+    },
 };
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum Unsigned {
     U8(u8),
     U16(u16),
@@ -80,45 +77,6 @@ impl_as_fill_metadata!(
     RuntimeMetadataV15,
     version_constant_data_and_ty_v15,
     MetaVersionErrorPallets::RuntimeVersionNotDecodeable
-);
-
-/// Find `Version` constant and its type in `System` pallet.
-macro_rules! version_constant_data_and_ty {
-    ($(#[$attr:meta] $ty: ty, $func: ident), *) => {
-        $(
-            #[$attr]
-            fn $func(pallets: &[$ty]) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionErrorPallets> {
-                let mut runtime_version_data_and_ty = None;
-                let mut system_block = false;
-                for pallet in pallets.iter() {
-                    if pallet.name == "System" {
-                        system_block = true;
-                        for constant in pallet.constants.iter() {
-                            if constant.name == "Version" {
-                                runtime_version_data_and_ty = Some((constant.value.to_vec(), constant.ty))
-                            }
-                        }
-                        break;
-                    }
-                }
-                if !system_block {
-                    return Err(MetaVersionErrorPallets::NoSystemPallet);
-                }
-                runtime_version_data_and_ty.ok_or(MetaVersionErrorPallets::NoVersionInConstants)
-            }
-        )*
-    }
-}
-
-version_constant_data_and_ty!(
-    /// Find `Version` constant and its type in `System` pallet for `V14` metadata.
-    PalletMetadataV14<PortableForm>,
-    version_constant_data_and_ty_v14
-);
-version_constant_data_and_ty!(
-    /// Find `Version` constant and its type in `System` pallet for `V15` metadata.
-    PalletMetadataV15<PortableForm>,
-    version_constant_data_and_ty_v15
 );
 
 /// Extract [`Unsigned`] `spec_version` from `Version` parsed data.
@@ -253,4 +211,46 @@ fn tx_version(parsed_data: ParsedData) -> Option<Unsigned> {
         return None;
     }
     tx_version
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parity_scale_codec::Decode;
+
+    fn metadata_v14(filename: &str) -> RuntimeMetadataV14 {
+        let metadata_hex = std::fs::read_to_string(filename).unwrap();
+        let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
+        RuntimeMetadataV14::decode(&mut &metadata_vec[5..]).unwrap()
+    }
+    
+    fn metadata_v15(filename: &str) -> RuntimeMetadataV15 {
+        let metadata_hex = std::fs::read_to_string(filename).unwrap();
+        let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
+        RuntimeMetadataV15::decode(&mut &metadata_vec[5..]).unwrap()
+    }
+
+    #[test]
+    fn as_fill_metadata_1() {
+        let metadata_westend = metadata_v14("for_tests/westend9111");
+        let spec_version =
+            <RuntimeMetadataV14 as AsFillMetadata<()>>::spec_version(&metadata_westend).unwrap();
+        assert_eq!(spec_version, Unsigned::U32(9111u32));
+        let tx_version =
+            <RuntimeMetadataV14 as AsFillMetadata<()>>::defined_tx_version(&metadata_westend)
+                .unwrap();
+        assert_eq!(tx_version, Unsigned::U32(7u32));
+    }
+    
+    #[test]
+    fn as_fill_metadata_2() {
+        let metadata_westend = metadata_v15("for_tests/westend1006001");
+        let spec_version =
+            <RuntimeMetadataV15 as AsFillMetadata<()>>::spec_version(&metadata_westend).unwrap();
+        assert_eq!(spec_version, Unsigned::U32(1006001u32));
+        let tx_version =
+            <RuntimeMetadataV15 as AsFillMetadata<()>>::defined_tx_version(&metadata_westend)
+                .unwrap();
+        assert_eq!(tx_version, Unsigned::U32(24u32));
+    }
 }
