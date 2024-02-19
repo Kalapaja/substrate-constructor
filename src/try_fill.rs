@@ -4,8 +4,11 @@ use num_bigint::{BigInt, BigUint};
 
 use primitive_types::H256;
 
-use crate::fill_prepare::{
-    ArrayU8ToFill, H256ToFill, RegularPrimitiveToFill, SequenceU8ToFill, UnsignedToFill,
+use crate::{
+    fill_prepare::{
+        ArrayU8ToFill, H256ToFill, RegularPrimitiveToFill, SequenceU8ToFill, UnsignedToFill,
+    },
+    traits::Unsigned,
 };
 
 pub trait TryFill {
@@ -38,6 +41,38 @@ impl TryFill for UnsignedToFill {
             UnsignedToFill::U128(ref mut old_value) => {
                 if let Ok(value) = u128::from_str(source) {
                     *old_value = Some(value)
+                }
+            }
+        }
+    }
+}
+
+impl UnsignedToFill {
+    pub fn upd_from_unsigned(&mut self, souce: &Unsigned) {
+        match self {
+            UnsignedToFill::U8(ref mut old_value) => {
+                if let Unsigned::U8(value) = souce {
+                    *old_value = Some(*value)
+                }
+            }
+            UnsignedToFill::U16(ref mut old_value) => {
+                if let Unsigned::U16(value) = souce {
+                    *old_value = Some(*value)
+                }
+            }
+            UnsignedToFill::U32(ref mut old_value) => {
+                if let Unsigned::U32(value) = souce {
+                    *old_value = Some(*value)
+                }
+            }
+            UnsignedToFill::U64(ref mut old_value) => {
+                if let Unsigned::U64(value) = souce {
+                    *old_value = Some(*value)
+                }
+            }
+            UnsignedToFill::U128(ref mut old_value) => {
+                if let Unsigned::U128(value) = souce {
+                    *old_value = Some(*value)
                 }
             }
         }
