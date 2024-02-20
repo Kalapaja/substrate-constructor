@@ -10,7 +10,7 @@ use substrate_parser::{
     },
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Unsigned {
     U8(u8),
     U16(u16),
@@ -223,7 +223,7 @@ mod tests {
         let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
         RuntimeMetadataV14::decode(&mut &metadata_vec[5..]).unwrap()
     }
-    
+
     fn metadata_v15(filename: &str) -> RuntimeMetadataV15 {
         let metadata_hex = std::fs::read_to_string(filename).unwrap();
         let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
@@ -241,7 +241,7 @@ mod tests {
                 .unwrap();
         assert_eq!(tx_version, Unsigned::U32(7u32));
     }
-    
+
     #[test]
     fn as_fill_metadata_2() {
         let metadata_westend = metadata_v15("for_tests/westend1006001");
