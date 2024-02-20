@@ -1,5 +1,5 @@
 use crate::fill_prepare::{
-    ArrayRegularToFill, ArrayU8ToFill, BitSequenceToFill, EraToFill, FieldToFill, PrimitiveToFill,
+    ArrayRegularToFill, ArrayU8ToFill, EraToFill, FieldToFill, PrimitiveToFill,
     RegularPrimitiveToFill, SequenceRegularToFill, SequenceU8ToFill, SpecialTypeToFill,
     SpecialtyUnsignedToFill, TransactionToFill, TypeContentToFill, UnsignedToFill, VariantSelected,
     VariantSelector,
@@ -33,7 +33,7 @@ impl IsReady for TypeContentToFill {
             TypeContentToFill::ArrayRegular(array_regular_to_fill) => {
                 array_regular_to_fill.is_ready()
             }
-            TypeContentToFill::BitSequence(bit_sequence_to_fill) => bit_sequence_to_fill.is_ready(),
+            TypeContentToFill::BitSequence(_) => true,
             TypeContentToFill::Composite(fields_to_fill) => {
                 for field in fields_to_fill.iter() {
                     if !field.is_ready() {
@@ -82,23 +82,6 @@ impl IsReady for VariantSelected {
             }
         }
         true
-    }
-}
-
-impl IsReady for BitSequenceToFill {
-    fn is_ready(&self) -> bool {
-        match &self {
-            BitSequenceToFill::BitVecU8Lsb0(a) => a.is_some(),
-            BitSequenceToFill::BitVecU16Lsb0(a) => a.is_some(),
-            BitSequenceToFill::BitVecU32Lsb0(a) => a.is_some(),
-            #[cfg(target_pointer_width = "64")]
-            BitSequenceToFill::BitVecU64Lsb0(a) => a.is_some(),
-            BitSequenceToFill::BitVecU8Msb0(a) => a.is_some(),
-            BitSequenceToFill::BitVecU16Msb0(a) => a.is_some(),
-            BitSequenceToFill::BitVecU32Msb0(a) => a.is_some(),
-            #[cfg(target_pointer_width = "64")]
-            BitSequenceToFill::BitVecU64Msb0(a) => a.is_some(),
-        }
     }
 }
 

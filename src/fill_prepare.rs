@@ -25,7 +25,7 @@ use crate::{
     traits::{AsFillMetadata, Unsigned},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VariantSelected {
     pub selector_index: usize,
     pub docs: String,
@@ -34,7 +34,7 @@ pub struct VariantSelected {
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FieldToFill {
     pub type_to_fill: TypeToFill,
     pub field_docs: String,
@@ -42,17 +42,17 @@ pub struct FieldToFill {
     pub type_name: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TypeToFill {
     pub content: TypeContentToFill,
     pub info: Vec<Info>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TypeContentToFill {
     ArrayU8(ArrayU8ToFill),
     ArrayRegular(ArrayRegularToFill),
-    BitSequence(BitSequenceToFill),
+    BitSequence(BitSequenceContent),
     Composite(Vec<FieldToFill>),
     Primitive(PrimitiveToFill),
     SequenceRegular(SequenceRegularToFill),
@@ -63,7 +63,7 @@ pub enum TypeContentToFill {
     VariantEmpty,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VariantSelector {
     pub available_variants: Vec<Variant<PortableForm>>,
     pub selected: VariantSelected,
@@ -143,28 +143,28 @@ impl VariantSelector {
     }
 }
 
-#[derive(Debug)]
-pub enum BitSequenceToFill {
-    BitVecU8Lsb0(Option<BitVec<u8, Lsb0>>),
-    BitVecU16Lsb0(Option<BitVec<u16, Lsb0>>),
-    BitVecU32Lsb0(Option<BitVec<u32, Lsb0>>),
+#[derive(Clone, Debug)]
+pub enum BitSequenceContent {
+    BitVecU8Lsb0(BitVec<u8, Lsb0>),
+    BitVecU16Lsb0(BitVec<u16, Lsb0>),
+    BitVecU32Lsb0(BitVec<u32, Lsb0>),
     #[cfg(target_pointer_width = "64")]
-    BitVecU64Lsb0(Option<BitVec<u64, Lsb0>>),
-    BitVecU8Msb0(Option<BitVec<u8, Msb0>>),
-    BitVecU16Msb0(Option<BitVec<u16, Msb0>>),
-    BitVecU32Msb0(Option<BitVec<u32, Msb0>>),
+    BitVecU64Lsb0(BitVec<u64, Lsb0>),
+    BitVecU8Msb0(BitVec<u8, Msb0>),
+    BitVecU16Msb0(BitVec<u16, Msb0>),
+    BitVecU32Msb0(BitVec<u32, Msb0>),
     #[cfg(target_pointer_width = "64")]
-    BitVecU64Msb0(Option<BitVec<u64, Msb0>>),
+    BitVecU64Msb0(BitVec<u64, Msb0>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PrimitiveToFill {
     CompactUnsigned(SpecialtyUnsignedToFill),
     Regular(RegularPrimitiveToFill),
     Unsigned(SpecialtyUnsignedToFill),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum RegularPrimitiveToFill {
     Bool(Option<bool>),
     Char(Option<char>),
@@ -178,7 +178,7 @@ pub enum RegularPrimitiveToFill {
     U256(Option<BigUint>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum UnsignedToFill {
     U8(Option<u8>),
     U16(Option<u16>),
@@ -187,7 +187,19 @@ pub enum UnsignedToFill {
     U128(Option<u128>),
 }
 
-#[derive(Debug)]
+impl UnsignedToFill {
+    pub fn into_unsigned(&self) -> Option<Unsigned> {
+        match &self {
+            UnsignedToFill::U8(a) => a.map(Unsigned::U8),
+            UnsignedToFill::U16(a) => a.map(Unsigned::U16),
+            UnsignedToFill::U32(a) => a.map(Unsigned::U32),
+            UnsignedToFill::U64(a) => a.map(Unsigned::U64),
+            UnsignedToFill::U128(a) => a.map(Unsigned::U128),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct SpecialtyUnsignedToFill {
     pub content: UnsignedToFill,
     pub specialty: SpecialtyUnsignedInteger,
@@ -206,13 +218,13 @@ pub struct SequenceDraftContent {
     pub checker: Checker,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SequenceU8ToFill {
     pub content: Vec<u8>,
     pub info_element: Vec<Info>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SequenceRegularToFill {
     pub content: Vec<TypeContentToFill>,
     pub info_element: Vec<Info>,
@@ -258,14 +270,14 @@ impl SequenceRegularToFill {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArrayU8ToFill {
     pub content: Vec<u8>,
     pub info_element: Vec<Info>,
     pub len: u32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArrayRegularToFill {
     pub content: Vec<TypeContentToFill>,
     pub info_element: Vec<Info>,
@@ -274,7 +286,7 @@ pub struct ArrayRegularToFill {
     pub len: u32,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SpecialTypeToFill {
     AccountId32(Option<AccountId32>),
     Era(EraToFill),
@@ -304,13 +316,13 @@ pub enum SpecialTypeToFill {
     PublicEcdsa(Option<PublicEcdsa>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct H256ToFill {
     pub hash: Option<H256>,
     pub specialty: SpecialtyH256,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum EraToFill {
     Immortal,
     Mortal {
@@ -474,7 +486,7 @@ pub fn prepare_primitive(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TransactionToFill {
     pub author: TypeToFill,
     pub call: TypeToFill,
@@ -1070,7 +1082,7 @@ pub fn prepare_bit_sequence<E, M>(
     id: u32,
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
-) -> Result<BitSequenceToFill, RegistryError>
+) -> Result<BitSequenceContent, RegistryError>
 where
     E: ExternalMemory,
     M: AsFillMetadata<E>,
@@ -1083,21 +1095,21 @@ where
 
     match bitstore_type.type_def {
         TypeDef::Primitive(TypeDefPrimitive::U8) => match bitorder {
-            FoundBitOrder::Lsb0 => Ok(BitSequenceToFill::BitVecU8Lsb0(None)),
-            FoundBitOrder::Msb0 => Ok(BitSequenceToFill::BitVecU8Msb0(None)),
+            FoundBitOrder::Lsb0 => Ok(BitSequenceContent::BitVecU8Lsb0(BitVec::new())),
+            FoundBitOrder::Msb0 => Ok(BitSequenceContent::BitVecU8Msb0(BitVec::new())),
         },
         TypeDef::Primitive(TypeDefPrimitive::U16) => match bitorder {
-            FoundBitOrder::Lsb0 => Ok(BitSequenceToFill::BitVecU16Lsb0(None)),
-            FoundBitOrder::Msb0 => Ok(BitSequenceToFill::BitVecU16Msb0(None)),
+            FoundBitOrder::Lsb0 => Ok(BitSequenceContent::BitVecU16Lsb0(BitVec::new())),
+            FoundBitOrder::Msb0 => Ok(BitSequenceContent::BitVecU16Msb0(BitVec::new())),
         },
         TypeDef::Primitive(TypeDefPrimitive::U32) => match bitorder {
-            FoundBitOrder::Lsb0 => Ok(BitSequenceToFill::BitVecU32Lsb0(None)),
-            FoundBitOrder::Msb0 => Ok(BitSequenceToFill::BitVecU32Msb0(None)),
+            FoundBitOrder::Lsb0 => Ok(BitSequenceContent::BitVecU32Lsb0(BitVec::new())),
+            FoundBitOrder::Msb0 => Ok(BitSequenceContent::BitVecU32Msb0(BitVec::new())),
         },
         #[cfg(target_pointer_width = "64")]
         TypeDef::Primitive(TypeDefPrimitive::U64) => match bitorder {
-            FoundBitOrder::Lsb0 => Ok(BitSequenceToFill::BitVecU64Lsb0(None)),
-            FoundBitOrder::Msb0 => Ok(BitSequenceToFill::BitVecU64Msb0(None)),
+            FoundBitOrder::Lsb0 => Ok(BitSequenceContent::BitVecU64Lsb0(BitVec::new())),
+            FoundBitOrder::Msb0 => Ok(BitSequenceContent::BitVecU64Msb0(BitVec::new())),
         },
         _ => Err(RegistryError::NotBitStoreType { id }),
     }
