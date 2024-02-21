@@ -7,9 +7,12 @@ use substrate_parser::{
 #[derive(Debug)]
 pub enum ErrorFixMe<E: ExternalMemory, M: AsMetadata<E>> {
     ExtensionsList(ExtensionsError),
+    ExtraNotInExtensions,
     MetaStructure(M::MetaStructureError),
     Registry(RegistryError),
     UnexpectedVariantIndex,
+    UnfinalizedExtension,
+    WrongExtraStructure,
 }
 
 impl<E: ExternalMemory, M: AsMetadata<E>> From<RegistryError> for ErrorFixMe<E, M> {

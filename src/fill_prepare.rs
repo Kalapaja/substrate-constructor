@@ -1,7 +1,7 @@
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use external_memory_tools::ExternalMemory;
 use num_bigint::{BigInt, BigUint};
-//use parity_scale_codec::{Compact, Encode};
+use parity_scale_codec::Encode;
 use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
@@ -9,7 +9,10 @@ use scale_info::{
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use substrate_parser::{
-    additional_types::{AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519},
+    additional_types::{
+        AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+        SignatureSr25519,
+    },
     cards::{Documented, Info},
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
     error::{ExtensionsError, RegistryError},
@@ -22,7 +25,9 @@ use std::any::TypeId;
 
 use crate::{
     error::ErrorFixMe,
+    finalize::{Finalize, TypeContent},
     traits::{AsFillMetadata, Unsigned},
+    try_fill::TryFill,
 };
 
 #[derive(Clone, Debug)]
@@ -314,6 +319,9 @@ pub enum SpecialTypeToFill {
     PublicEd25519(Option<PublicEd25519>),
     PublicSr25519(Option<PublicSr25519>),
     PublicEcdsa(Option<PublicEcdsa>),
+    SignatureEd25519(Option<SignatureEd25519>),
+    SignatureSr25519(Option<SignatureSr25519>),
+    SignatureEcdsa(Option<SignatureEcdsa>),
 }
 
 #[derive(Clone, Debug)]
@@ -412,7 +420,15 @@ macro_rules! impl_fill_special {
     }
 }
 
-impl_fill_special!(AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
+impl_fill_special!(
+    AccountId32,
+    PublicEd25519,
+    PublicSr25519,
+    PublicEcdsa,
+    SignatureEd25519,
+    SignatureSr25519,
+    SignatureEcdsa
+);
 
 impl FillSpecial for EraToFill {
     fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
@@ -492,7 +508,8 @@ pub struct TransactionToFill {
     pub call: TypeToFill,
     pub extensions: Vec<TypeToFill>,
     pub signature: TypeToFill,
-    pub extra: TypeToFill,
+    pub extra: Vec<usize>,
+    pub genesis_hash: H256,
 }
 
 impl TransactionToFill {
@@ -534,16 +551,11 @@ impl TransactionToFill {
             Propagated::new(),
         )?;
 
-        let extra = prepare_type::<E, M>(
-            &Ty::Symbol(&extrinsic_type_params.extra_ty),
-            ext_memory,
-            &registry,
-            Propagated::new(),
-        )?;
-
         let mut extensions = Vec::new();
+        let mut extensions_ty_ids = Vec::new();
 
         for signed_extensions_metadata in signed_extensions.iter() {
+            extensions_ty_ids.push(signed_extensions_metadata.ty.id);
             extensions.push(prepare_type::<E, M>(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 ext_memory,
@@ -552,6 +564,7 @@ impl TransactionToFill {
             )?)
         }
         for signed_extensions_metadata in signed_extensions.iter() {
+            extensions_ty_ids.push(signed_extensions_metadata.additional_signed.id);
             extensions.push(prepare_type::<E, M>(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 ext_memory,
@@ -559,31 +572,307 @@ impl TransactionToFill {
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )?)
         }
+
         check_extensions(&extensions).map_err(ErrorFixMe::ExtensionsList)?;
+
+        let extra = extra_indices_in_extensions::<E, M>(
+            ext_memory,
+            &registry,
+            &extrinsic_type_params.extra_ty,
+            &extensions_ty_ids,
+        )?;
+
         let mut out = TransactionToFill {
             author,
             call,
             extensions,
             signature,
             extra,
+            genesis_hash,
         };
         out.populate_genesis_hash(genesis_hash);
         out.populate_spec_version(&metadata.spec_version().map_err(ErrorFixMe::MetaStructure)?);
         if let Some(tx_version) = &metadata.defined_tx_version() {
             out.populate_tx_version(tx_version)
         }
+        out.try_default_tip();
+        out.try_default_signature_to_sr25519(ext_memory, metadata)
+            .map_err(ErrorFixMe::Registry)?;
         Ok(out)
     }
 
-    pub fn populate_block_hash(&mut self, genesis_hash: H256, block_hash: H256) {
+    pub fn populate_block_hash(&mut self, block_hash: H256) {
         let hash = if era_is_immortal(&self.extensions) {
-            genesis_hash
+            self.genesis_hash
         } else {
             block_hash
         };
 
         self.populate_block_hash_helper(hash)
     }
+
+    pub fn try_default_tip(&mut self) {
+        for extension in self.extensions.iter_mut() {
+            try_default_tip(&mut extension.content);
+            if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
+                if fields_to_fill.len() == 1 {
+                    try_default_tip(&mut fields_to_fill[0].type_to_fill.content);
+                }
+            }
+        }
+    }
+
+    /// There could be different types of signature available for the chain.
+    ///
+    /// In case there is a set of variants to select from, check if sr25519
+    /// variant is available and select it.
+    pub fn try_default_signature_to_sr25519<E, M>(
+        &mut self,
+        ext_memory: &mut E,
+        metadata: &M,
+    ) -> Result<(), RegistryError>
+    where
+        E: ExternalMemory,
+        M: AsFillMetadata<E>,
+    {
+        if let TypeContentToFill::Variant(ref mut variant_selector) = self.signature.content {
+            let mut found_index = None;
+            let registry = metadata.types();
+            for (i, variant) in variant_selector.available_variants.iter().enumerate() {
+                if variant.fields.len() == 1 {
+                    let ty = registry.resolve_ty(variant.fields[0].ty.id, ext_memory)?;
+                    if let SpecialtyTypeHinted::SignatureSr25519 =
+                        SpecialtyTypeHinted::from_type(&ty)
+                    {
+                        found_index = Some(i);
+                        break;
+                    }
+                }
+            }
+            if let Some(new_selector_index) = found_index {
+                *variant_selector = VariantSelector::new_at::<E, M>(
+                    &variant_selector.available_variants,
+                    ext_memory,
+                    &registry,
+                    new_selector_index,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Either the type itself is sr25519 signature, the type is single field
+    /// struct with sr25519 signature, or the variant selector with sr25519
+    /// signature selected
+    pub fn signature_is_sr25519(&self) -> bool {
+        match self.signature.content {
+            TypeContentToFill::Composite(ref fields_to_fill) => {
+                if fields_to_fill.len() == 1 {
+                    matches!(
+                        fields_to_fill[0].type_to_fill.content,
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::SignatureSr25519(_))
+                    )
+                } else {
+                    false
+                }
+            }
+            TypeContentToFill::SpecialType(SpecialTypeToFill::SignatureSr25519(_)) => true,
+            TypeContentToFill::Variant(ref variant_selector) => {
+                if variant_selector.selected.fields_to_fill.len() == 1 {
+                    matches!(
+                        variant_selector.selected.fields_to_fill[0]
+                            .type_to_fill
+                            .content,
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::SignatureSr25519(_))
+                    )
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Either the type itself is sr25519 compatible (AccountId32 or sr25519
+    /// public key), the type is single field struct with one of those types,
+    /// or the variant selector with one of those types selected
+    pub fn author_as_sr25519_compatible(&self) -> Option<[u8; 32]> {
+        match &self.author.content {
+            TypeContentToFill::Composite(ref fields_to_fill) => {
+                if fields_to_fill.len() == 1 {
+                    match &fields_to_fill[0].type_to_fill.content {
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
+                            a.clone().map(|b| b.0)
+                        }
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
+                            a.clone().map(|b| b.0)
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
+                a.clone().map(|b| b.0)
+            }
+            TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
+                a.clone().map(|b| b.0)
+            }
+            TypeContentToFill::Variant(ref variant_selector) => {
+                if variant_selector.selected.fields_to_fill.len() == 1 {
+                    match &variant_selector.selected.fields_to_fill[0]
+                        .type_to_fill
+                        .content
+                    {
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
+                            a.clone().map(|b| b.0)
+                        }
+                        TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
+                            a.clone().map(|b| b.0)
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn extrinsic_to_sign(&self) -> Option<ExtrinsicToSign> {
+        if let Some(call) = self.call.finalize() {
+            let mut extensions = Vec::new();
+            for ext in self.extensions.iter() {
+                if let Some(a) = ext.finalize() {
+                    extensions.push(a);
+                } else {
+                    return None;
+                }
+            }
+            Some(ExtrinsicToSign {
+                call: call.to_owned(),
+                extensions,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn sign_this(&self) -> Option<Vec<u8>> {
+        if let Some(extrinsic_to_sign) = self.extrinsic_to_sign() {
+            let mut out = extrinsic_to_sign.call.encode();
+            for ext in extrinsic_to_sign.extensions.iter() {
+                out.extend_from_slice(&ext.encode())
+            }
+            Some(out)
+        } else {
+            None
+        }
+    }
+
+    pub fn into_signer_transaction_format(&self) -> Option<Vec<u8>> {
+        if let Some(extrinsic_to_sign) = self.extrinsic_to_sign() {
+            let mut out = extrinsic_to_sign.call.encode().encode(); // call prefixed by call length
+            for ext in extrinsic_to_sign.extensions.iter() {
+                out.extend_from_slice(&ext.encode())
+            }
+            Some(out)
+        } else {
+            None
+        }
+    }
+
+    pub fn output_qr_data_signer_style(&self) -> Option<Vec<u8>> {
+        if let Some(author) = self.author_as_sr25519_compatible() {
+            if let Some(signable) = self.into_signer_transaction_format() {
+                let mut out = vec![0x53, 0x01, 0x00];
+                out.extend_from_slice(&author);
+                out.extend_from_slice(&signable);
+                out.extend_from_slice(&self.genesis_hash.0);
+                Some(out)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn signed_unchecked_extrinsic<E, M>(
+        &self,
+        metadata: &M,
+    ) -> Result<Option<SignedUncheckedExtrinsic>, ErrorFixMe<E, M>>
+    where
+        E: ExternalMemory,
+        M: AsFillMetadata<E>,
+    {
+        if let Some(author) = self.author.finalize() {
+            if let Some(signature) = self.signature.finalize() {
+                if let Some(call) = self.call.finalize() {
+                    let mut extra = Vec::new();
+                    for extra_index in self.extra.iter() {
+                        let addition = self.extensions[*extra_index]
+                            .finalize()
+                            .ok_or(ErrorFixMe::UnfinalizedExtension)?;
+                        extra.push(addition);
+                    }
+                    let extrinsic_version = metadata
+                        .extrinsic_version()
+                        .map_err(ErrorFixMe::MetaStructure)?;
+                    return Ok(Some(SignedUncheckedExtrinsic {
+                        version_byte: extrinsic_version | 0b1000_0000,
+                        author: author.to_owned(),
+                        signature: signature.to_owned(),
+                        extra,
+                        call: call.to_owned(),
+                    }));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+pub fn extra_indices_in_extensions<E: ExternalMemory, M: AsFillMetadata<E>>(
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+    extra_symbol: &UntrackedSymbol<TypeId>,
+    extensions_ty_ids: &[u32],
+) -> Result<Vec<usize>, ErrorFixMe<E, M>> {
+    let extra_ty = registry
+        .resolve_ty(extra_symbol.id, ext_memory)
+        .map_err(ErrorFixMe::Registry)?;
+    let extra_ty_ids: Vec<u32> = match &extra_ty.type_def {
+        TypeDef::Composite(composite) => composite.fields.iter().map(|field| field.ty.id).collect(),
+        TypeDef::Tuple(tuple) => tuple.fields.iter().map(|ty| ty.id).collect(),
+        _ => return Err(ErrorFixMe::WrongExtraStructure),
+    };
+    let mut out = Vec::new();
+    for extra_ty_id in extra_ty_ids.iter() {
+        let new = extensions_ty_ids
+            .iter()
+            .position(|extension_ty_id| extension_ty_id == extra_ty_id)
+            .ok_or(ErrorFixMe::ExtraNotInExtensions)?;
+        out.push(new);
+    }
+    Ok(out)
+}
+
+#[derive(Clone, Debug)]
+pub struct ExtrinsicToSign {
+    pub call: TypeContent,
+    pub extensions: Vec<TypeContent>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SignedUncheckedExtrinsic {
+    pub version_byte: u8,
+    pub author: TypeContent,
+    pub signature: TypeContent,
+    pub extra: Vec<TypeContent>,
+    pub call: TypeContent,
 }
 
 macro_rules! populate {
@@ -617,18 +906,18 @@ populate!(populate_spec_version, &Unsigned, spec_version_got_filled);
 populate!(populate_tx_version, &Unsigned, tx_version_got_filled);
 populate!(populate_nonce, &Unsigned, nonce_got_filled);
 
-macro_rules! got_filled_unsigned_version {
-    ($($func: ident, $version: ident), *) => {
+macro_rules! got_filled_unsigned {
+    ($($func: ident, $unsigned: ident), *) => {
         $(
-            fn $func(content: &mut TypeContentToFill, version: &Unsigned) -> bool {
+            fn $func(content: &mut TypeContentToFill, unsigned: &Unsigned) -> bool {
                 match content {
                     TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
                         ref mut specialty_unsigned_to_fill,
                     )) => {
-                        if let SpecialtyUnsignedInteger::$version = specialty_unsigned_to_fill.specialty {
+                        if let SpecialtyUnsignedInteger::$unsigned = specialty_unsigned_to_fill.specialty {
                             specialty_unsigned_to_fill
                                 .content
-                                .upd_from_unsigned(version);
+                                .upd_from_unsigned(unsigned);
                             true
                         } else {
                             false
@@ -637,10 +926,10 @@ macro_rules! got_filled_unsigned_version {
                     TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
                         ref mut specialty_unsigned_to_fill,
                     )) => {
-                        if let SpecialtyUnsignedInteger::$version = specialty_unsigned_to_fill.specialty {
+                        if let SpecialtyUnsignedInteger::$unsigned = specialty_unsigned_to_fill.specialty {
                             specialty_unsigned_to_fill
                                 .content
-                                .upd_from_unsigned(version);
+                                .upd_from_unsigned(unsigned);
                             true
                         } else {
                             false
@@ -653,9 +942,29 @@ macro_rules! got_filled_unsigned_version {
     }
 }
 
-got_filled_unsigned_version!(spec_version_got_filled, SpecVersion);
-got_filled_unsigned_version!(tx_version_got_filled, TxVersion);
-got_filled_unsigned_version!(nonce_got_filled, Nonce);
+got_filled_unsigned!(spec_version_got_filled, SpecVersion);
+got_filled_unsigned!(tx_version_got_filled, TxVersion);
+got_filled_unsigned!(nonce_got_filled, Nonce);
+
+fn try_default_tip(content: &mut TypeContentToFill) {
+    match content {
+        TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+            ref mut specialty_unsigned_to_fill,
+        )) => {
+            if let SpecialtyUnsignedInteger::Tip = specialty_unsigned_to_fill.specialty {
+                specialty_unsigned_to_fill.content.upd_from_str("0");
+            }
+        }
+        TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+            ref mut specialty_unsigned_to_fill,
+        )) => {
+            if let SpecialtyUnsignedInteger::Tip = specialty_unsigned_to_fill.specialty {
+                specialty_unsigned_to_fill.content.upd_from_str("0");
+            }
+        }
+        _ => {}
+    }
+}
 
 fn era_is_immortal(extensions: &[TypeToFill]) -> bool {
     let mut era_is_immortal = true;
@@ -877,6 +1186,24 @@ where
         }),
         SpecialtyTypeHinted::PublicEcdsa => Ok(TypeToFill {
             content: TypeContentToFill::SpecialType(PublicEcdsa::special_to_fill(
+                &propagated.checker.specialty_set,
+            )?),
+            info: propagated.info,
+        }),
+        SpecialtyTypeHinted::SignatureEd25519 => Ok(TypeToFill {
+            content: TypeContentToFill::SpecialType(SignatureEd25519::special_to_fill(
+                &propagated.checker.specialty_set,
+            )?),
+            info: propagated.info,
+        }),
+        SpecialtyTypeHinted::SignatureSr25519 => Ok(TypeToFill {
+            content: TypeContentToFill::SpecialType(SignatureSr25519::special_to_fill(
+                &propagated.checker.specialty_set,
+            )?),
+            info: propagated.info,
+        }),
+        SpecialtyTypeHinted::SignatureEcdsa => Ok(TypeToFill {
+            content: TypeContentToFill::SpecialType(SignatureEcdsa::special_to_fill(
                 &propagated.checker.specialty_set,
             )?),
             info: propagated.info,
