@@ -1,9 +1,9 @@
 pub mod error;
 pub mod fill_prepare;
 pub mod finalize;
-pub mod first_empty;
-pub mod is_ready;
 pub mod peeker;
 pub mod steamroller;
+#[cfg(test)]
+mod tests;
 pub mod traits;
 pub mod try_fill;

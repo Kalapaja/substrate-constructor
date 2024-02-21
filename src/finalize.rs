@@ -3,13 +3,14 @@ use parity_scale_codec::{Compact, Encode};
 use primitive_types::H256;
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use substrate_parser::additional_types::{
-    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519,
+    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    SignatureSr25519,
 };
 
 use crate::fill_prepare::{
     ArrayRegularToFill, ArrayU8ToFill, BitSequenceContent, EraToFill, PrimitiveToFill,
-    RegularPrimitiveToFill, SequenceU8ToFill, SpecialTypeToFill, TransactionToFill,
-    TypeContentToFill, TypeToFill, VariantSelector,
+    RegularPrimitiveToFill, SequenceU8ToFill, SpecialTypeToFill, TypeContentToFill, TypeToFill,
+    VariantSelector,
 };
 use crate::traits::Unsigned;
 
@@ -201,6 +202,9 @@ pub enum SpecialType {
     PublicEd25519(PublicEd25519),
     PublicSr25519(PublicSr25519),
     PublicEcdsa(PublicEcdsa),
+    SignatureEd25519(SignatureEd25519),
+    SignatureSr25519(SignatureSr25519),
+    SignatureEcdsa(SignatureEcdsa),
 }
 
 impl Encode for SpecialType {
@@ -247,6 +251,9 @@ impl Encode for SpecialType {
             SpecialType::PublicEd25519(a) => a.0.to_vec(),
             SpecialType::PublicSr25519(a) => a.0.to_vec(),
             SpecialType::PublicEcdsa(a) => a.0.to_vec(),
+            SpecialType::SignatureEd25519(a) => a.0.to_vec(),
+            SpecialType::SignatureSr25519(a) => a.0.to_vec(),
+            SpecialType::SignatureEcdsa(a) => a.0.to_vec(),
         }
     }
 }
@@ -299,6 +306,9 @@ impl Finalize for SpecialTypeToFill {
             SpecialTypeToFill::PublicEd25519(a) => a.clone().map(SpecialType::PublicEd25519),
             SpecialTypeToFill::PublicSr25519(a) => a.clone().map(SpecialType::PublicSr25519),
             SpecialTypeToFill::PublicEcdsa(a) => a.clone().map(SpecialType::PublicEcdsa),
+            SpecialTypeToFill::SignatureEd25519(a) => a.clone().map(SpecialType::SignatureEd25519),
+            SpecialTypeToFill::SignatureSr25519(a) => a.clone().map(SpecialType::SignatureSr25519),
+            SpecialTypeToFill::SignatureEcdsa(a) => a.clone().map(SpecialType::SignatureEcdsa),
         }
     }
 }
@@ -462,43 +472,5 @@ impl Finalize for TypeToFill {
     type FinalForm = TypeContent;
     fn finalize(&self) -> Option<Self::FinalForm> {
         self.content.finalize()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ExtrinsicToSign {
-    pub call: TypeContent,
-    pub extensions: Vec<TypeContent>,
-}
-
-impl Encode for ExtrinsicToSign {
-    fn encode(&self) -> Vec<u8> {
-        let mut out = self.call.encode().encode(); // double encode, this will have call length prefix
-        for ext in self.extensions.iter() {
-            out.extend_from_slice(&ext.encode())
-        }
-        out
-    }
-}
-
-impl Finalize for TransactionToFill {
-    type FinalForm = ExtrinsicToSign;
-    fn finalize(&self) -> Option<Self::FinalForm> {
-        if let Some(call) = self.call.finalize() {
-            let mut extensions = Vec::new();
-            for ext in self.extensions.iter() {
-                if let Some(a) = ext.finalize() {
-                    extensions.push(a);
-                } else {
-                    return None;
-                }
-            }
-            Some(ExtrinsicToSign {
-                call: call.to_owned(),
-                extensions,
-            })
-        } else {
-            None
-        }
     }
 }
