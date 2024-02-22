@@ -962,7 +962,7 @@ populate!(populate_genesis_hash, H256, genesis_hash_got_filled);
 populate!(populate_block_hash_helper, H256, block_hash_got_filled);
 populate!(populate_spec_version, &Unsigned, spec_version_got_filled);
 populate!(populate_tx_version, &Unsigned, tx_version_got_filled);
-populate!(populate_nonce, &Unsigned, nonce_got_filled);
+populate!(populate_nonce, u64, nonce_got_filled);
 
 macro_rules! got_filled_unsigned {
     ($($func:ident, $unsigned:ident), *) => {
@@ -1002,7 +1002,32 @@ macro_rules! got_filled_unsigned {
 
 got_filled_unsigned!(spec_version_got_filled, SpecVersion);
 got_filled_unsigned!(tx_version_got_filled, TxVersion);
-got_filled_unsigned!(nonce_got_filled, Nonce);
+
+fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u64: u64) -> bool {
+    match content {
+        TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+            ref mut specialty_unsigned_to_fill,
+        )) => {
+            if let SpecialtyUnsignedInteger::Nonce = specialty_unsigned_to_fill.specialty {
+                specialty_unsigned_to_fill.content.upd_from_rpc_u64(rpc_u64);
+                true
+            } else {
+                false
+            }
+        }
+        TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+            ref mut specialty_unsigned_to_fill,
+        )) => {
+            if let SpecialtyUnsignedInteger::Nonce = specialty_unsigned_to_fill.specialty {
+                specialty_unsigned_to_fill.content.upd_from_rpc_u64(rpc_u64);
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
 
 fn try_default_tip(content: &mut TypeContentToFill) {
     match content {

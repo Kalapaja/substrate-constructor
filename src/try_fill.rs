@@ -48,6 +48,14 @@ macro_rules! unsigned {
     };
 }
 
+macro_rules! rpc_u64_fit {
+    ($ty:ty, $old:tt, $source:tt) => {
+        if let Ok(value) = <$ty>::try_from($source) {
+            *$old = Some(value)
+        }
+    };
+}
+
 impl UnsignedToFill {
     pub fn upd_from_unsigned(&mut self, source: &Unsigned) {
         match self {
@@ -56,6 +64,15 @@ impl UnsignedToFill {
             UnsignedToFill::U32(ref mut old) => unsigned!(U32, old, source),
             UnsignedToFill::U64(ref mut old) => unsigned!(U64, old, source),
             UnsignedToFill::U128(ref mut old) => unsigned!(U128, old, source),
+        }
+    }
+    pub fn upd_from_rpc_u64(&mut self, source: u64) {
+        match self {
+            UnsignedToFill::U8(ref mut old) => rpc_u64_fit!(u8, old, source),
+            UnsignedToFill::U16(ref mut old) => rpc_u64_fit!(u16, old, source),
+            UnsignedToFill::U32(ref mut old) => rpc_u64_fit!(u32, old, source),
+            UnsignedToFill::U64(ref mut old) => rpc_u64_fit!(u64, old, source),
+            UnsignedToFill::U128(ref mut old) => rpc_u64_fit!(u128, old, source),
         }
     }
 }
