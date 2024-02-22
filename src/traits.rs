@@ -25,10 +25,9 @@ pub trait AsFillMetadata<E: ExternalMemory>: AsCompleteMetadata<E> {
 }
 
 // TODO spec_version as unsigned may go eventually into substrate_parser.
-// TODO version_constant_data_and_ty should become public in substrate_parser.
 
 macro_rules! impl_as_fill_metadata {
-    ($($ty: ty, $func: ident, $err: expr), *) => {
+    ($($ty:ty, $func:ident, $err:expr), *) => {
         $(
             impl <E: ExternalMemory> AsFillMetadata<E> for $ty {
                 fn defined_tx_version(&self) -> Option<Unsigned> {

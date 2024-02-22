@@ -1,12 +1,17 @@
 use std::str::FromStr;
 
 use num_bigint::{BigInt, BigUint};
-
 use primitive_types::H256;
+use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
+use substrate_parser::additional_types::{
+    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    SignatureSr25519,
+};
 
 use crate::{
     fill_prepare::{
-        ArrayU8ToFill, H256ToFill, RegularPrimitiveToFill, SequenceU8ToFill, UnsignedToFill,
+        ArrayU8ToFill, EraToFill, RegularPrimitiveToFill, SequenceU8ToFill, SpecialTypeToFill,
+        UnsignedToFill,
     },
     traits::Unsigned,
 };
@@ -15,66 +20,42 @@ pub trait TryFill {
     fn upd_from_str(&mut self, source: &str);
 }
 
+macro_rules! primitive_str {
+    ($ty:ty, $old:tt, $source:tt) => {
+        if let Ok(value) = <$ty>::from_str($source) {
+            *$old = Some(value)
+        }
+    };
+}
+
 impl TryFill for UnsignedToFill {
     fn upd_from_str(&mut self, source: &str) {
         match self {
-            UnsignedToFill::U8(ref mut old_value) => {
-                if let Ok(value) = u8::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            UnsignedToFill::U16(ref mut old_value) => {
-                if let Ok(value) = u16::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            UnsignedToFill::U32(ref mut old_value) => {
-                if let Ok(value) = u32::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            UnsignedToFill::U64(ref mut old_value) => {
-                if let Ok(value) = u64::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            UnsignedToFill::U128(ref mut old_value) => {
-                if let Ok(value) = u128::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
+            UnsignedToFill::U8(ref mut old) => primitive_str!(u8, old, source),
+            UnsignedToFill::U16(ref mut old) => primitive_str!(u16, old, source),
+            UnsignedToFill::U32(ref mut old) => primitive_str!(u32, old, source),
+            UnsignedToFill::U64(ref mut old) => primitive_str!(u64, old, source),
+            UnsignedToFill::U128(ref mut old) => primitive_str!(u128, old, source),
         }
     }
 }
 
+macro_rules! unsigned {
+    ($variant:ident, $old:tt, $source:tt) => {
+        if let Unsigned::$variant(value) = $source {
+            *$old = Some(*value)
+        }
+    };
+}
+
 impl UnsignedToFill {
-    pub fn upd_from_unsigned(&mut self, souce: &Unsigned) {
+    pub fn upd_from_unsigned(&mut self, source: &Unsigned) {
         match self {
-            UnsignedToFill::U8(ref mut old_value) => {
-                if let Unsigned::U8(value) = souce {
-                    *old_value = Some(*value)
-                }
-            }
-            UnsignedToFill::U16(ref mut old_value) => {
-                if let Unsigned::U16(value) = souce {
-                    *old_value = Some(*value)
-                }
-            }
-            UnsignedToFill::U32(ref mut old_value) => {
-                if let Unsigned::U32(value) = souce {
-                    *old_value = Some(*value)
-                }
-            }
-            UnsignedToFill::U64(ref mut old_value) => {
-                if let Unsigned::U64(value) = souce {
-                    *old_value = Some(*value)
-                }
-            }
-            UnsignedToFill::U128(ref mut old_value) => {
-                if let Unsigned::U128(value) = souce {
-                    *old_value = Some(*value)
-                }
-            }
+            UnsignedToFill::U8(ref mut old) => unsigned!(U8, old, source),
+            UnsignedToFill::U16(ref mut old) => unsigned!(U16, old, source),
+            UnsignedToFill::U32(ref mut old) => unsigned!(U32, old, source),
+            UnsignedToFill::U64(ref mut old) => unsigned!(U64, old, source),
+            UnsignedToFill::U128(ref mut old) => unsigned!(U128, old, source),
         }
     }
 }
@@ -82,61 +63,99 @@ impl UnsignedToFill {
 impl TryFill for RegularPrimitiveToFill {
     fn upd_from_str(&mut self, source: &str) {
         match self {
-            RegularPrimitiveToFill::Bool(ref mut old_value) => {
-                if let Ok(value) = bool::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::Char(ref mut old_value) => {
-                if let Ok(value) = char::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I8(ref mut old_value) => {
-                if let Ok(value) = i8::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I16(ref mut old_value) => {
-                if let Ok(value) = i16::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I32(ref mut old_value) => {
-                if let Ok(value) = i32::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I64(ref mut old_value) => {
-                if let Ok(value) = i64::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I128(ref mut old_value) => {
-                if let Ok(value) = i128::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::I256(ref mut old_value) => {
-                if let Ok(value) = BigInt::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
-            RegularPrimitiveToFill::Str(ref mut old_value) => *old_value = source.to_owned(),
-            RegularPrimitiveToFill::U256(ref mut old_value) => {
-                if let Ok(value) = BigUint::from_str(source) {
-                    *old_value = Some(value)
-                }
-            }
+            RegularPrimitiveToFill::Bool(ref mut old) => primitive_str!(bool, old, source),
+            RegularPrimitiveToFill::Char(ref mut old) => primitive_str!(char, old, source),
+            RegularPrimitiveToFill::I8(ref mut old) => primitive_str!(i8, old, source),
+            RegularPrimitiveToFill::I16(ref mut old) => primitive_str!(i16, old, source),
+            RegularPrimitiveToFill::I32(ref mut old) => primitive_str!(i32, old, source),
+            RegularPrimitiveToFill::I64(ref mut old) => primitive_str!(i64, old, source),
+            RegularPrimitiveToFill::I128(ref mut old) => primitive_str!(i128, old, source),
+            RegularPrimitiveToFill::I256(ref mut old) => primitive_str!(BigInt, old, source),
+            RegularPrimitiveToFill::Str(ref mut old) => *old = source.to_owned(),
+            RegularPrimitiveToFill::U256(ref mut old) => primitive_str!(BigUint, old, source),
         }
     }
 }
 
-impl TryFill for H256ToFill {
+macro_rules! array_from_hex {
+    ($ty:expr, $old:tt, $source:tt) => {
+        if let Ok(value) = hex::decode($source) {
+            if let Ok(array) = value.try_into() {
+                *$old = Some($ty(array))
+            }
+        }
+    };
+}
+
+macro_rules! perthing_from_str {
+    ($ty:ty, $inner_ty:ty, $old:tt, $source:tt) => {
+        if let Ok(parts) = <$inner_ty>::from_str($source) {
+            *$old = Some(<$ty>::from_parts(parts))
+        }
+    };
+}
+
+impl TryFill for SpecialTypeToFill {
     fn upd_from_str(&mut self, source: &str) {
-        if let Ok(value) = hex::decode(source) {
-            if let Ok(hash) = value.try_into() {
-                self.hash = Some(H256(hash))
+        match self {
+            SpecialTypeToFill::AccountId32(ref mut old) => {
+                array_from_hex!(AccountId32, old, source)
+            }
+            SpecialTypeToFill::Era(ref mut old) => {
+                let possibly_mortal: Vec<&str> = source.split(' ').collect();
+                if possibly_mortal.len() == 2 {
+                    // assumed here that whoever enters mortal phase knows what they are doing
+                    if let Ok(period) = u64::from_str(possibly_mortal[0]) {
+                        if let Ok(phase) = u64::from_str(possibly_mortal[1]) {
+                            *old = EraToFill::Mortal {
+                                period: Some(period),
+                                phase: Some(phase),
+                            };
+                        }
+                    }
+                }
+            }
+            SpecialTypeToFill::H256 {
+                hash: ref mut old,
+                specialty: _,
+            } => array_from_hex!(H256, old, source),
+            SpecialTypeToFill::PerU16 {
+                value: ref mut old,
+                is_compact: _,
+            } => perthing_from_str!(PerU16, u16, old, source),
+            SpecialTypeToFill::Perbill {
+                value: ref mut old,
+                is_compact: _,
+            } => perthing_from_str!(Perbill, u32, old, source),
+            SpecialTypeToFill::Percent {
+                value: ref mut old,
+                is_compact: _,
+            } => perthing_from_str!(Percent, u8, old, source),
+            SpecialTypeToFill::Permill {
+                value: ref mut old,
+                is_compact: _,
+            } => perthing_from_str!(Permill, u32, old, source),
+            SpecialTypeToFill::Perquintill {
+                value: ref mut old,
+                is_compact: _,
+            } => perthing_from_str!(Perquintill, u64, old, source),
+            SpecialTypeToFill::PublicEd25519(ref mut old) => {
+                array_from_hex!(PublicEd25519, old, source)
+            }
+            SpecialTypeToFill::PublicSr25519(ref mut old) => {
+                array_from_hex!(PublicSr25519, old, source)
+            }
+            SpecialTypeToFill::PublicEcdsa(ref mut old) => {
+                array_from_hex!(PublicEcdsa, old, source)
+            }
+            SpecialTypeToFill::SignatureEd25519(ref mut old) => {
+                array_from_hex!(SignatureEd25519, old, source)
+            }
+            SpecialTypeToFill::SignatureSr25519(ref mut old) => {
+                array_from_hex!(SignatureSr25519, old, source)
+            }
+            SpecialTypeToFill::SignatureEcdsa(ref mut old) => {
+                array_from_hex!(SignatureEcdsa, old, source)
             }
         }
     }

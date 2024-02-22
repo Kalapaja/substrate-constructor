@@ -295,7 +295,10 @@ pub struct ArrayRegularToFill {
 pub enum SpecialTypeToFill {
     AccountId32(Option<AccountId32>),
     Era(EraToFill),
-    H256(H256ToFill),
+    H256 {
+        hash: Option<H256>,
+        specialty: SpecialtyH256,
+    },
     PerU16 {
         value: Option<PerU16>,
         is_compact: bool,
@@ -325,12 +328,6 @@ pub enum SpecialTypeToFill {
 }
 
 #[derive(Clone, Debug)]
-pub struct H256ToFill {
-    pub hash: Option<H256>,
-    pub specialty: SpecialtyH256,
-}
-
-#[derive(Clone, Debug)]
 pub enum EraToFill {
     Immortal,
     Mortal {
@@ -344,7 +341,7 @@ pub trait FillPrimitive {
 }
 
 macro_rules! impl_regular_fill_primitive {
-    ($($ty: ty, $variant: ident), *) => {
+    ($($ty:ty, $variant:ident), *) => {
         $(
             impl FillPrimitive for $ty {
                 fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError> {
@@ -376,7 +373,7 @@ impl FillPrimitive for String {
 }
 
 macro_rules! impl_unsigned_fill_primitive {
-    ($($ty: ty, $variant: ident), *) => {
+    ($($ty:ty, $variant:ident), *) => {
         $(
             impl FillPrimitive for $ty {
                 fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError> {
@@ -408,7 +405,7 @@ pub trait FillSpecial {
 }
 
 macro_rules! impl_fill_special {
-    ($($ty: tt), *) => {
+    ($($ty:tt), *) => {
         $(
             impl FillSpecial for $ty {
                 fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
@@ -454,19 +451,19 @@ impl EraToFill {
     }
 }
 
-impl FillSpecial for H256ToFill {
+impl FillSpecial for H256 {
     fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
         specialty_set.reject_compact()?;
         let specialty = specialty_set.hint.hash256();
-        Ok(SpecialTypeToFill::H256(H256ToFill {
+        Ok(SpecialTypeToFill::H256 {
             hash: None,
             specialty,
-        }))
+        })
     }
 }
 
 macro_rules! impl_fill_special_with_compact {
-    ($($ty: tt), *) => {
+    ($($ty:tt), *) => {
         $(
             impl FillSpecial for $ty {
                 fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
@@ -937,7 +934,7 @@ pub struct UnsignedUncheckedExtrinsic {
 }
 
 macro_rules! populate {
-    ($($func: ident, $filler: ty, $helper_func: ident), *) => {
+    ($($func:ident, $filler:ty, $helper_func:ident), *) => {
         $(
             impl TransactionToFill {
                 pub fn $func(&mut self, filler: $filler) {
@@ -968,7 +965,7 @@ populate!(populate_tx_version, &Unsigned, tx_version_got_filled);
 populate!(populate_nonce, &Unsigned, nonce_got_filled);
 
 macro_rules! got_filled_unsigned {
-    ($($func: ident, $unsigned: ident), *) => {
+    ($($func:ident, $unsigned:ident), *) => {
         $(
             fn $func(content: &mut TypeContentToFill, unsigned: &Unsigned) -> bool {
                 match content {
@@ -1055,17 +1052,14 @@ fn era_is_immortal(extensions: &[TypeToFill]) -> bool {
 }
 
 macro_rules! got_filled_hash {
-    ($($func: ident, $hash: ident), *) => {
+    ($($func:ident, $hash:ident), *) => {
         $(
             fn $func(content: &mut TypeContentToFill, hash: H256) -> bool {
-                if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256(ref mut hash_to_fill)) =
+                if let TypeContentToFill::SpecialType(SpecialTypeToFill::H256{hash: ref mut hash_to_fill, specialty: SpecialtyH256::$hash}) =
                         content
                     {
-                        if let SpecialtyH256::$hash = hash_to_fill.specialty {
-                            hash_to_fill.hash = Some(hash);
-                            true
-                        }
-                        else {false}
+                        *hash_to_fill = Some(hash);
+                        true
                     }
                 else {false}
             }
@@ -1101,8 +1095,8 @@ impl CheckExtensions {
                     self.found_era = true;
                 }
             }
-            TypeContentToFill::SpecialType(SpecialTypeToFill::H256(h256_to_fill)) => {
-                match h256_to_fill.specialty {
+            TypeContentToFill::SpecialType(SpecialTypeToFill::H256 { hash: _, specialty }) => {
+                match specialty {
                     SpecialtyH256::BlockHash => {
                         if self.found_block_hash {
                             return Err(ExtensionsError::GenesisHashTwice);
@@ -1198,7 +1192,7 @@ where
             info: propagated.info,
         }),
         SpecialtyTypeHinted::H256 => Ok(TypeToFill {
-            content: TypeContentToFill::SpecialType(H256ToFill::special_to_fill(
+            content: TypeContentToFill::SpecialType(H256::special_to_fill(
                 &propagated.checker.specialty_set,
             )?),
             info: propagated.info,
