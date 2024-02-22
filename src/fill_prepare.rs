@@ -833,6 +833,61 @@ impl TransactionToFill {
         }
         Ok(None)
     }
+
+    pub fn send_this_signed<E, M>(&self, metadata: &M) -> Result<Option<Vec<u8>>, ErrorFixMe<E, M>>
+    where
+        E: ExternalMemory,
+        M: AsFillMetadata<E>,
+    {
+        if let Some(signed_unchecked_extrinsic) = self.signed_unchecked_extrinsic(metadata)? {
+            let mut out = vec![signed_unchecked_extrinsic.version_byte];
+            out.extend_from_slice(&signed_unchecked_extrinsic.author.encode());
+            out.extend_from_slice(&signed_unchecked_extrinsic.signature.encode());
+            out.extend_from_slice(&signed_unchecked_extrinsic.extra.encode());
+            out.extend_from_slice(&signed_unchecked_extrinsic.call.encode());
+            Ok(Some(out.encode()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn unsigned_unchecked_extrinsic<E, M>(
+        &self,
+        metadata: &M,
+    ) -> Result<Option<UnsignedUncheckedExtrinsic>, ErrorFixMe<E, M>>
+    where
+        E: ExternalMemory,
+        M: AsFillMetadata<E>,
+    {
+        if let Some(call) = self.call.finalize() {
+            let extrinsic_version = metadata
+                .extrinsic_version()
+                .map_err(ErrorFixMe::MetaStructure)?;
+            Ok(Some(UnsignedUncheckedExtrinsic {
+                version_byte: extrinsic_version,
+                call: call.to_owned(),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn send_this_unsigned<E, M>(
+        &self,
+        metadata: &M,
+    ) -> Result<Option<Vec<u8>>, ErrorFixMe<E, M>>
+    where
+        E: ExternalMemory,
+        M: AsFillMetadata<E>,
+    {
+        if let Some(unsigned_unchecked_extrinsic) = self.unsigned_unchecked_extrinsic(metadata)? {
+            let mut out = vec![unsigned_unchecked_extrinsic.version_byte];
+            out.extend_from_slice(&unsigned_unchecked_extrinsic.call.encode());
+            Ok(Some(out.encode()))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 pub fn extra_indices_in_extensions<E: ExternalMemory, M: AsFillMetadata<E>>(
@@ -872,6 +927,12 @@ pub struct SignedUncheckedExtrinsic {
     pub author: TypeContent,
     pub signature: TypeContent,
     pub extra: Vec<TypeContent>,
+    pub call: TypeContent,
+}
+
+#[derive(Clone, Debug)]
+pub struct UnsignedUncheckedExtrinsic {
+    pub version_byte: u8,
     pub call: TypeContent,
 }
 
