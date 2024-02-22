@@ -840,7 +840,9 @@ impl TransactionToFill {
             let mut out = vec![signed_unchecked_extrinsic.version_byte];
             out.extend_from_slice(&signed_unchecked_extrinsic.author.encode());
             out.extend_from_slice(&signed_unchecked_extrinsic.signature.encode());
-            out.extend_from_slice(&signed_unchecked_extrinsic.extra.encode());
+            for extra_element in signed_unchecked_extrinsic.extra.iter() {
+                out.extend_from_slice(&extra_element.encode());
+            }
             out.extend_from_slice(&signed_unchecked_extrinsic.call.encode());
             Ok(Some(out.encode()))
         } else {
