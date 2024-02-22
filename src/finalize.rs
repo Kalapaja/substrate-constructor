@@ -287,7 +287,7 @@ impl Finalize for SpecialTypeToFill {
                     }
                 }
             },
-            SpecialTypeToFill::H256(a) => a.hash.map(SpecialType::H256),
+            SpecialTypeToFill::H256 { hash, specialty: _ } => hash.map(SpecialType::H256),
             SpecialTypeToFill::PerU16 { value, is_compact } => {
                 finalize_perthing_compact!(value, is_compact, PerU16)
             }
