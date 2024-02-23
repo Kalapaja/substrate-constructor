@@ -1,7 +1,15 @@
 [package]
+description = "Extrinsic constructor for Substrate based chains"
+license = "GPL-3.0-or-later"
 name = "substrate-constructor"
 version = "0.1.0"
+authors = ["Alexander Slesarev <slesarew@gmail.com>", "Vera Abramova <abramova.vera@gmail.com>"]
 edition = "2021"
+repository = "https://github.com/Alzymologist/substrate-constructor"
+homepage = "https://github.com/Alzymologist/substrate-constructor"
+documentation = "https://docs.rs/substrate_constructor/"
+keywords = ["parser", "substrate"]
+exclude = ["/for_tests", "/.github"]
 
 [dependencies]
 bitvec = {version = "1.0.1", default-features = false, features = ["alloc"]}
