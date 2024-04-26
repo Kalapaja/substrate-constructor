@@ -3,6 +3,7 @@ use parity_scale_codec::Decode;
 use primitive_types::H256;
 
 use crate::fill_prepare::TransactionToFill;
+use crate::storage_query::StorageSelector;
 use crate::traits::{AsFillMetadata, Unsigned};
 
 fn metadata_v14(filename: &str) -> RuntimeMetadataV14 {
@@ -53,4 +54,17 @@ fn init_transaction() {
     assert!(transaction_to_fill_test.is_ok());
     let transaction_to_fill = transaction_to_fill_test.unwrap();
     assert!(transaction_to_fill.signature_is_sr25519());
+}
+
+#[test]
+fn init_storage_query() {
+    let metadata_westend = metadata_v15("for_tests/westend1006001");
+    let storage_selector = StorageSelector::init(&mut (), &metadata_westend).unwrap();
+    match storage_selector {
+        StorageSelector::Empty => panic!("storage selector generated, but is empty"),
+        StorageSelector::Functional(functional) => {
+            let query_finalized = functional.query.finalize().unwrap();
+            assert!(query_finalized.is_none());
+        }
+    }
 }

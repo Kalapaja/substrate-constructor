@@ -20,3 +20,9 @@ impl<E: ExternalMemory, M: AsMetadata<E>> From<RegistryError> for ErrorFixMe<E, 
         ErrorFixMe::Registry(registry_error)
     }
 }
+
+#[derive(Debug)]
+pub enum StorageRegistryError {
+    MapHashesNotATuple,
+    MapHashesNumberMismatch,
+}

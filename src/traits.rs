@@ -1,5 +1,12 @@
 use external_memory_tools::ExternalMemory;
-use frame_metadata::{v14::RuntimeMetadataV14, v15::RuntimeMetadataV15};
+use frame_metadata::{
+    v14::{
+        PalletCallMetadata, PalletConstantMetadata, PalletErrorMetadata, PalletEventMetadata,
+        PalletMetadata as PalletMetadataV14, PalletStorageMetadata, RuntimeMetadataV14,
+    },
+    v15::{PalletMetadata as PalletMetadataV15, RuntimeMetadataV15},
+};
+use scale_info::form::PortableForm;
 use substrate_parser::{
     cards::ParsedData,
     decode_all_as_type,
@@ -10,6 +17,8 @@ use substrate_parser::{
     },
 };
 
+use std::fmt::Debug;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Unsigned {
     U8(u8),
@@ -19,7 +28,54 @@ pub enum Unsigned {
     U128(u128),
 }
 
+pub trait AsPalletMetadata<E: ExternalMemory> {
+    fn name(&self) -> String;
+    fn storage(&self) -> Option<PalletStorageMetadata<PortableForm>>;
+    fn calls(&self) -> Option<PalletCallMetadata<PortableForm>>;
+    fn event(&self) -> Option<PalletEventMetadata<PortableForm>>;
+    fn constants(&self) -> Vec<PalletConstantMetadata<PortableForm>>;
+    fn error(&self) -> Option<PalletErrorMetadata<PortableForm>>;
+    fn index(&self) -> u8;
+}
+
+macro_rules! impl_as_pallet_metadata {
+    ($($ty:ty), *) => {
+        $(
+            impl <E: ExternalMemory> AsPalletMetadata<E> for $ty {
+                fn name(&self) -> String {
+                    self.name.to_owned()
+                }
+                fn storage(&self) -> Option<PalletStorageMetadata<PortableForm>> {
+                    self.storage.to_owned()
+                }
+                fn calls(&self) -> Option<PalletCallMetadata<PortableForm>> {
+                    self.calls.to_owned()
+                }
+                fn event(&self) -> Option<PalletEventMetadata<PortableForm>> {
+                    self.event.to_owned()
+                }
+                fn constants(&self) -> Vec<PalletConstantMetadata<PortableForm>> {
+                    self.constants.to_owned()
+                }
+                fn error(&self) -> Option<PalletErrorMetadata<PortableForm>> {
+                    self.error.to_owned()
+                }
+                fn index(&self) -> u8 {
+                    self.index
+                }
+            }
+        )*
+    }
+}
+
+impl_as_pallet_metadata!(
+    PalletMetadataV14<PortableForm>,
+    PalletMetadataV15<PortableForm>
+);
+
 pub trait AsFillMetadata<E: ExternalMemory>: AsCompleteMetadata<E> {
+    type PalletMetadata: AsPalletMetadata<E> + Clone + Debug;
+    fn pallets(&self) -> Vec<Self::PalletMetadata>;
     fn defined_tx_version(&self) -> Option<Unsigned>;
     fn spec_version(&self) -> Result<Unsigned, Self::MetaStructureError>;
 }
@@ -27,9 +83,13 @@ pub trait AsFillMetadata<E: ExternalMemory>: AsCompleteMetadata<E> {
 // TODO spec_version as unsigned may go eventually into substrate_parser.
 
 macro_rules! impl_as_fill_metadata {
-    ($($ty:ty, $func:ident, $err:expr), *) => {
+    ($($ty:ty, $ty_pallet_metadata:ty, $func:ident, $err:expr), *) => {
         $(
             impl <E: ExternalMemory> AsFillMetadata<E> for $ty {
+                type PalletMetadata = $ty_pallet_metadata;
+                fn pallets(&self) -> Vec<Self::PalletMetadata> {
+                    self.pallets.to_owned()
+                }
                 fn defined_tx_version(&self) -> Option<Unsigned> {
                     match $func(&self.pallets) {
                         Ok((version_data, version_ty)) => {
@@ -69,11 +129,13 @@ macro_rules! impl_as_fill_metadata {
 
 impl_as_fill_metadata!(
     RuntimeMetadataV14,
+    PalletMetadataV14<PortableForm>,
     version_constant_data_and_ty_v14,
     MetaStructureErrorV14::Version(MetaVersionErrorPallets::RuntimeVersionNotDecodeable)
 );
 impl_as_fill_metadata!(
     RuntimeMetadataV15,
+    PalletMetadataV15<PortableForm>,
     version_constant_data_and_ty_v15,
     MetaVersionErrorPallets::RuntimeVersionNotDecodeable
 );
