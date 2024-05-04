@@ -592,7 +592,7 @@ impl TransactionToFill {
         if let Some(tx_version) = &metadata.defined_tx_version() {
             out.populate_tx_version(tx_version)
         }
-        out.try_default_tip();
+        out.try_default_tip::<E, M>(ext_memory, &registry);
         out.try_default_signature_to_sr25519(ext_memory, metadata)
             .map_err(ErrorFixMe::Registry)?;
         Ok(out)
@@ -608,12 +608,16 @@ impl TransactionToFill {
         self.populate_block_hash_helper(hash)
     }
 
-    pub fn try_default_tip(&mut self) {
+    pub fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
+        &mut self,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) {
         for extension in self.extensions.iter_mut() {
-            try_default_tip(&mut extension.content);
+            try_default_tip::<E, M>(&mut extension.content, ext_memory, registry);
             if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
-                if fields_to_fill.len() == 1 {
-                    try_default_tip(&mut fields_to_fill[0].type_to_fill.content);
+                for field in fields_to_fill.iter_mut() {
+                    try_default_tip::<E, M>(&mut field.type_to_fill.content, ext_memory, registry);
                 }
             }
         }
@@ -964,7 +968,7 @@ populate!(populate_genesis_hash, H256, genesis_hash_got_filled);
 populate!(populate_block_hash_helper, H256, block_hash_got_filled);
 populate!(populate_spec_version, &Unsigned, spec_version_got_filled);
 populate!(populate_tx_version, &Unsigned, tx_version_got_filled);
-populate!(populate_nonce, u64, nonce_got_filled);
+populate!(populate_nonce, u32, nonce_got_filled);
 
 macro_rules! got_filled_unsigned {
     ($($func:ident, $unsigned:ident), *) => {
@@ -1005,13 +1009,13 @@ macro_rules! got_filled_unsigned {
 got_filled_unsigned!(spec_version_got_filled, SpecVersion);
 got_filled_unsigned!(tx_version_got_filled, TxVersion);
 
-fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u64: u64) -> bool {
+fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u32: u32) -> bool {
     match content {
         TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
             ref mut specialty_unsigned_to_fill,
         )) => {
             if let SpecialtyUnsignedInteger::Nonce = specialty_unsigned_to_fill.specialty {
-                specialty_unsigned_to_fill.content.upd_from_rpc_u64(rpc_u64);
+                specialty_unsigned_to_fill.content.upd_from_rpc_u32(rpc_u32);
                 true
             } else {
                 false
@@ -1021,7 +1025,7 @@ fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u64: u64) -> bool {
             ref mut specialty_unsigned_to_fill,
         )) => {
             if let SpecialtyUnsignedInteger::Nonce = specialty_unsigned_to_fill.specialty {
-                specialty_unsigned_to_fill.content.upd_from_rpc_u64(rpc_u64);
+                specialty_unsigned_to_fill.content.upd_from_rpc_u32(rpc_u32);
                 true
             } else {
                 false
@@ -1031,20 +1035,49 @@ fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u64: u64) -> bool {
     }
 }
 
-fn try_default_tip(content: &mut TypeContentToFill) {
+fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
+    content: &mut TypeContentToFill,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+) {
     match content {
         TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
             ref mut specialty_unsigned_to_fill,
         )) => {
-            if let SpecialtyUnsignedInteger::Tip = specialty_unsigned_to_fill.specialty {
+            if specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Tip
+                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Balance
+            {
                 specialty_unsigned_to_fill.content.upd_from_str("0");
             }
         }
         TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
             ref mut specialty_unsigned_to_fill,
         )) => {
-            if let SpecialtyUnsignedInteger::Tip = specialty_unsigned_to_fill.specialty {
+            if specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Tip
+                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Balance
+            {
                 specialty_unsigned_to_fill.content.upd_from_str("0");
+            }
+        }
+        TypeContentToFill::Variant(ref mut variant_selector) => {
+            let mut index_of_none = None;
+
+            for (index, variant) in variant_selector.available_variants.iter().enumerate() {
+                if variant.name == "None" {
+                    index_of_none = Some(index);
+                    break;
+                }
+            }
+
+            if let Some(index) = index_of_none {
+                if let Ok(new_variant_selector) = VariantSelector::new_at::<E, M>(
+                    &variant_selector.available_variants,
+                    ext_memory,
+                    registry,
+                    index,
+                ) {
+                    *variant_selector = new_variant_selector;
+                }
             }
         }
         _ => {}
