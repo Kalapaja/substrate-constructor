@@ -9,14 +9,14 @@ pub enum ErrorFixMe<E: ExternalMemory, M: AsMetadata<E>> {
     ExtensionsList(ExtensionsError),
     ExtraNotInExtensions,
     MetaStructure(M::MetaStructureError),
-    Registry(RegistryError),
+    Registry(RegistryError<E>),
     UnexpectedVariantIndex,
     UnfinalizedExtension,
     WrongExtraStructure,
 }
 
-impl<E: ExternalMemory, M: AsMetadata<E>> From<RegistryError> for ErrorFixMe<E, M> {
-    fn from(registry_error: RegistryError) -> Self {
+impl<E: ExternalMemory, M: AsMetadata<E>> From<RegistryError<E>> for ErrorFixMe<E, M> {
+    fn from(registry_error: RegistryError<E>) -> Self {
         ErrorFixMe::Registry(registry_error)
     }
 }

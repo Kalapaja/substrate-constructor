@@ -22,4 +22,5 @@ primitive-types = {version = "0.12.2", default-features = false}
 scale-info = {version = "2.10.0", default-features = false}
 sp-arithmetic = {version = "25.0.0", default-features = false}
 sp-crypto-hashing = {version = "0.1.0", default-features = false}
-substrate_parser = {version = "0.6.1", default-features = false}
+substrate-crypto-light = {git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
+substrate_parser = {git = "https://github.com/Alzymologist/substrate-parser", default-features = false}

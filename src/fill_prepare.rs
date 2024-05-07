@@ -8,14 +8,16 @@ use scale_info::{
     TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
+use substrate_crypto_light::{
+    common::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
+};
 use substrate_parser::{
-    additional_types::{
-        AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-        SignatureSr25519,
-    },
     cards::{Documented, Info},
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
-    error::{ExtensionsError, RegistryError},
+    error::{ExtensionsError, RegistryError, RegistryInternalError},
     propagated::{Checker, Propagated, SpecialtySet},
     special_indicators::{SpecialtyH256, SpecialtyTypeHinted, SpecialtyUnsignedInteger},
     traits::ResolveType,
@@ -79,7 +81,7 @@ impl VariantSelector {
         variants: &[Variant<PortableForm>],
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         Self::new_at::<E, M>(variants, ext_memory, registry, 0)
     }
     pub fn new_at<E: ExternalMemory, M: AsFillMetadata<E>>(
@@ -87,7 +89,7 @@ impl VariantSelector {
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
         selector_index: usize,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         // this panics if selector is out of bounds; fix this later;
         let variant = &variants[selector_index];
         let name = variant.name.to_owned();
@@ -110,7 +112,7 @@ impl VariantSelector {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.selected.selector_index + 1 == self.available_variants.len() {
                 0
@@ -130,7 +132,7 @@ impl VariantSelector {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.selected.selector_index == 0 {
                 self.available_variants.len() - 1
@@ -245,7 +247,7 @@ impl SequenceRegularToFill {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let element = prepare_type::<E, M>(
             &Ty::Resolved(ResolvedTy {
                 ty: self.ty.to_owned(),
@@ -263,7 +265,7 @@ impl SequenceRegularToFill {
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
         number_of_elements: usize,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         if self.content.len() <= number_of_elements {
             for _i in 0..number_of_elements - self.content.len() {
                 self.add_new_element::<E, M>(ext_memory, registry)?;
@@ -331,21 +333,25 @@ pub enum SpecialTypeToFill {
 pub enum EraToFill {
     Immortal,
     Mortal {
-        period: Option<u64>,
-        phase: Option<u64>,
+        period_entry: u64,
+        block_number_entry: Option<u64>,
     },
 }
 
+pub const DEFAULT_PERIOD: u64 = 64;
+
 pub trait FillPrimitive {
-    fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError>;
+    fn primitive_to_fill(
+        specialty_set: &SpecialtySet,
+    ) -> Result<PrimitiveToFill, RegistryInternalError>;
 }
 
 macro_rules! impl_regular_fill_primitive {
     ($($ty:ty, $variant:ident), *) => {
         $(
             impl FillPrimitive for $ty {
-                fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError> {
-                    if let Some(id) = specialty_set.compact_at {Err(RegistryError::UnexpectedCompactInsides{id})}
+                fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryInternalError> {
+                    if let Some(id) = specialty_set.compact_at {Err(RegistryInternalError::UnexpectedCompactInsides{id})}
                     else {Ok(PrimitiveToFill::Regular(RegularPrimitiveToFill::$variant(None)))}
                 }
             }
@@ -364,7 +370,9 @@ impl_regular_fill_primitive!(BigInt, I256);
 impl_regular_fill_primitive!(BigUint, U256);
 
 impl FillPrimitive for String {
-    fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError> {
+    fn primitive_to_fill(
+        specialty_set: &SpecialtySet,
+    ) -> Result<PrimitiveToFill, RegistryInternalError> {
         specialty_set.reject_compact()?;
         Ok(PrimitiveToFill::Regular(RegularPrimitiveToFill::Str(
             String::new(),
@@ -376,7 +384,7 @@ macro_rules! impl_unsigned_fill_primitive {
     ($($ty:ty, $variant:ident), *) => {
         $(
             impl FillPrimitive for $ty {
-                fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryError> {
+                fn primitive_to_fill(specialty_set: &SpecialtySet) -> Result<PrimitiveToFill, RegistryInternalError> {
                     let specialty = specialty_set.unsigned_integer();
                     let specialty_unsigned_to_fill = SpecialtyUnsignedToFill {
                         content: UnsignedToFill::$variant(None),
@@ -401,14 +409,16 @@ impl_unsigned_fill_primitive!(u64, U64);
 impl_unsigned_fill_primitive!(u128, U128);
 
 pub trait FillSpecial {
-    fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError>;
+    fn special_to_fill(
+        specialty_set: &SpecialtySet,
+    ) -> Result<SpecialTypeToFill, RegistryInternalError>;
 }
 
 macro_rules! impl_fill_special {
     ($($ty:tt), *) => {
         $(
             impl FillSpecial for $ty {
-                fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+                fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryInternalError> {
                     specialty_set.reject_compact()?;
                     Ok(SpecialTypeToFill::$ty(None))
                 }
@@ -428,7 +438,9 @@ impl_fill_special!(
 );
 
 impl FillSpecial for EraToFill {
-    fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+    fn special_to_fill(
+        specialty_set: &SpecialtySet,
+    ) -> Result<SpecialTypeToFill, RegistryInternalError> {
         specialty_set.reject_compact()?;
         Ok(SpecialTypeToFill::Era(EraToFill::Immortal))
     }
@@ -439,20 +451,19 @@ impl EraToFill {
         match &self {
             EraToFill::Immortal => {
                 *self = EraToFill::Mortal {
-                    period: None,
-                    phase: None,
+                    period_entry: DEFAULT_PERIOD,
+                    block_number_entry: None,
                 }
             }
-            EraToFill::Mortal {
-                period: _,
-                phase: _,
-            } => *self = EraToFill::Immortal,
+            EraToFill::Mortal { .. } => *self = EraToFill::Immortal,
         }
     }
 }
 
 impl FillSpecial for H256 {
-    fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+    fn special_to_fill(
+        specialty_set: &SpecialtySet,
+    ) -> Result<SpecialTypeToFill, RegistryInternalError> {
         specialty_set.reject_compact()?;
         let specialty = specialty_set.hint.hash256();
         Ok(SpecialTypeToFill::H256 {
@@ -466,7 +477,7 @@ macro_rules! impl_fill_special_with_compact {
     ($($ty:tt), *) => {
         $(
             impl FillSpecial for $ty {
-                fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryError> {
+                fn special_to_fill(specialty_set: &SpecialtySet) -> Result<SpecialTypeToFill, RegistryInternalError> {
                     Ok(SpecialTypeToFill::$ty{value: None, is_compact: specialty_set.compact_at.is_some()})
                 }
             }
@@ -479,7 +490,7 @@ impl_fill_special_with_compact!(PerU16, Perbill, Percent, Permill, Perquintill);
 pub fn prepare_primitive(
     found_ty: &TypeDefPrimitive,
     specialty_set: &SpecialtySet,
-) -> Result<PrimitiveToFill, RegistryError> {
+) -> Result<PrimitiveToFill, RegistryInternalError> {
     match found_ty {
         TypeDefPrimitive::Bool => bool::primitive_to_fill(specialty_set),
         TypeDefPrimitive::Char => char::primitive_to_fill(specialty_set),
@@ -598,14 +609,19 @@ impl TransactionToFill {
         Ok(out)
     }
 
-    pub fn populate_block_hash(&mut self, block_hash: H256) {
-        let hash = if era_is_immortal(&self.extensions) {
-            self.genesis_hash
-        } else {
-            block_hash
-        };
-
-        self.populate_block_hash_helper(hash)
+    pub fn populate_block_hash(
+        &mut self,
+        optional_block_hash: Option<H256>,
+        optional_block_number: Option<u64>,
+    ) {
+        if era_is_immortal(&self.extensions) {
+            self.populate_block_hash_helper(self.genesis_hash)
+        } else if let Some(block_hash) = optional_block_hash {
+            if let Some(block_number) = optional_block_number {
+                self.populate_block_hash_helper(block_hash);
+                fill_mortal_block_number(&mut self.extensions, block_number)
+            }
+        }
     }
 
     pub fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
@@ -631,7 +647,7 @@ impl TransactionToFill {
         &mut self,
         ext_memory: &mut E,
         metadata: &M,
-    ) -> Result<(), RegistryError>
+    ) -> Result<(), RegistryError<E>>
     where
         E: ExternalMemory,
         M: AsFillMetadata<E>,
@@ -703,10 +719,10 @@ impl TransactionToFill {
                 if fields_to_fill.len() == 1 {
                     match &fields_to_fill[0].type_to_fill.content {
                         TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
-                            a.clone().map(|b| b.0)
+                            (*a).map(|b| b.0)
                         }
                         TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
-                            a.clone().map(|b| b.0)
+                            (*a).map(|b| b.0)
                         }
                         _ => None,
                     }
@@ -714,11 +730,9 @@ impl TransactionToFill {
                     None
                 }
             }
-            TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
-                a.clone().map(|b| b.0)
-            }
+            TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => (*a).map(|b| b.0),
             TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
-                a.clone().map(|b| b.0)
+                (*a).map(|b| b.0)
             }
             TypeContentToFill::Variant(ref variant_selector) => {
                 if variant_selector.selected.fields_to_fill.len() == 1 {
@@ -727,10 +741,10 @@ impl TransactionToFill {
                         .content
                     {
                         TypeContentToFill::SpecialType(SpecialTypeToFill::AccountId32(a)) => {
-                            a.clone().map(|b| b.0)
+                            (*a).map(|b| b.0)
                         }
                         TypeContentToFill::SpecialType(SpecialTypeToFill::PublicSr25519(a)) => {
-                            a.clone().map(|b| b.0)
+                            (*a).map(|b| b.0)
                         }
                         _ => None,
                     }
@@ -1045,7 +1059,7 @@ fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
             ref mut specialty_unsigned_to_fill,
         )) => {
             if specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Tip
-                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Balance
+                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::TipAsset
             {
                 specialty_unsigned_to_fill.content.upd_from_str("0");
             }
@@ -1054,7 +1068,7 @@ fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
             ref mut specialty_unsigned_to_fill,
         )) => {
             if specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Tip
-                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::Balance
+                || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::TipAsset
             {
                 specialty_unsigned_to_fill.content.upd_from_str("0");
             }
@@ -1109,6 +1123,39 @@ fn era_is_immortal(extensions: &[TypeToFill]) -> bool {
         }
     }
     era_is_immortal
+}
+
+fn fill_mortal_block_number(extensions: &mut [TypeToFill], block_number: u64) {
+    for extension in extensions.iter_mut() {
+        if let TypeContentToFill::SpecialType(SpecialTypeToFill::Era(ref mut era_to_fill)) =
+            extension.content
+        {
+            if let EraToFill::Mortal {
+                period_entry: _,
+                ref mut block_number_entry,
+            } = era_to_fill
+            {
+                *block_number_entry = Some(block_number);
+            }
+            break;
+        }
+        if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
+            if fields_to_fill.len() == 1 {
+                if let TypeContentToFill::SpecialType(SpecialTypeToFill::Era(ref mut era_to_fill)) =
+                    fields_to_fill[0].type_to_fill.content
+                {
+                    if let EraToFill::Mortal {
+                        period_entry: _,
+                        ref mut block_number_entry,
+                    } = era_to_fill
+                    {
+                        *block_number_entry = Some(block_number);
+                    }
+                    break;
+                }
+            }
+        }
+    }
 }
 
 macro_rules! got_filled_hash {
@@ -1226,7 +1273,7 @@ pub fn prepare_type<E, M>(
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
     mut propagated: Propagated,
-) -> Result<TypeToFill, RegistryError>
+) -> Result<TypeToFill, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsFillMetadata<E>,
@@ -1455,7 +1502,7 @@ pub fn prepare_fields<E, M>(
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
     mut checker: Checker,
-) -> Result<Vec<FieldToFill>, RegistryError>
+) -> Result<Vec<FieldToFill>, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsFillMetadata<E>,
@@ -1495,7 +1542,7 @@ pub fn prepare_elements_set<E, M>(
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
     propagated: Propagated,
-) -> Result<SequenceDraft, RegistryError>
+) -> Result<SequenceDraft, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsFillMetadata<E>,
@@ -1524,7 +1571,7 @@ pub fn prepare_bit_sequence<E, M>(
     id: u32,
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
-) -> Result<BitSequenceContent, RegistryError>
+) -> Result<BitSequenceContent, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsFillMetadata<E>,
@@ -1553,6 +1600,8 @@ where
             FoundBitOrder::Lsb0 => Ok(BitSequenceContent::BitVecU64Lsb0(BitVec::new())),
             FoundBitOrder::Msb0 => Ok(BitSequenceContent::BitVecU64Msb0(BitVec::new())),
         },
-        _ => Err(RegistryError::NotBitStoreType { id }),
+        _ => Err(RegistryError::Internal(
+            RegistryInternalError::NotBitStoreType { id },
+        )),
     }
 }

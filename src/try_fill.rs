@@ -3,9 +3,11 @@ use std::str::FromStr;
 use num_bigint::{BigInt, BigUint};
 use primitive_types::H256;
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use substrate_parser::additional_types::{
-    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
+use substrate_crypto_light::{
+    common::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
 use crate::{
@@ -121,12 +123,11 @@ impl TryFill for SpecialTypeToFill {
             SpecialTypeToFill::Era(ref mut old) => {
                 let possibly_mortal: Vec<&str> = source.split(' ').collect();
                 if possibly_mortal.len() == 2 {
-                    // assumed here that whoever enters mortal phase knows what they are doing
-                    if let Ok(period) = u64::from_str(possibly_mortal[0]) {
-                        if let Ok(phase) = u64::from_str(possibly_mortal[1]) {
+                    if let Ok(period_entry) = u64::from_str(possibly_mortal[0]) {
+                        if let Ok(block_number_entry) = u64::from_str(possibly_mortal[1]) {
                             *old = EraToFill::Mortal {
-                                period: Some(period),
-                                phase: Some(phase),
+                                period_entry,
+                                block_number_entry: Some(block_number_entry),
                             };
                         }
                     }
