@@ -609,7 +609,7 @@ impl TransactionToFill {
         Ok(out)
     }
 
-    pub fn populate_block_hash(
+    pub fn populate_block_info(
         &mut self,
         optional_block_hash: Option<H256>,
         optional_block_number: Option<u64>,
