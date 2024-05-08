@@ -27,7 +27,7 @@ impl EntrySelector {
         available_entries: &[StorageEntryMetadata<PortableForm>],
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         if available_entries.is_empty() {
             Ok(Self::Empty)
         } else {
@@ -53,7 +53,7 @@ impl EntrySelectorFunctional {
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
         selector_index: usize,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         let selected_entry_metadata = &available_entries[selector_index];
         let name = selected_entry_metadata.name.to_owned();
         let docs = selected_entry_metadata.collect_docs();
@@ -92,7 +92,7 @@ impl EntrySelectorFunctional {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.selected_entry.selector_index_entry + 1 == self.available_entries.len() {
                 0
@@ -113,7 +113,7 @@ impl EntrySelectorFunctional {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.selected_entry.selector_index_entry == 0 {
                 self.available_entries.len() - 1
@@ -159,7 +159,7 @@ impl StorageSelector {
     pub fn init<E: ExternalMemory, M: AsFillMetadata<E>>(
         ext_memory: &mut E,
         metadata: &M,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         let mut available_pallets: Vec<PalletStorageMetadata<PortableForm>> = Vec::new();
         for pallet in metadata.pallets().into_iter() {
             if let Some(pallet_storage_metadata) = pallet.storage() {
@@ -191,7 +191,7 @@ impl StorageSelectorFunctional {
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
         selector_index: usize,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryError<E>> {
         // TODO case bad index
         let selected_pallet_metadata = &available_pallets[selector_index];
 
@@ -215,7 +215,7 @@ impl StorageSelectorFunctional {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.query.selector_index_pallet + 1 == self.available_pallets.len() {
                 0
@@ -236,7 +236,7 @@ impl StorageSelectorFunctional {
         &mut self,
         ext_memory: &mut E,
         registry: &M::TypeRegistry,
-    ) -> Result<(), RegistryError> {
+    ) -> Result<(), RegistryError<E>> {
         let new_selector_index = {
             if self.query.selector_index_pallet == 0 {
                 self.available_pallets.len() - 1

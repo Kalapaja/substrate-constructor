@@ -2,10 +2,13 @@ use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Compact, Encode};
 use primitive_types::H256;
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use substrate_parser::additional_types::{
-    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
+use substrate_crypto_light::{
+    common::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
+use substrate_parser::additional_types::Era;
 
 use crate::fill_prepare::{
     ArrayRegularToFill, ArrayU8ToFill, BitSequenceContent, EraToFill, PrimitiveToFill,
@@ -267,25 +270,42 @@ macro_rules! finalize_perthing_compact {
     };
 }
 
+/// Mortal Era generation, from period and block number. From `sp_runtime::generic::Era`, verbatim.
+///
+/// Create a new era based on a period (which should be a power of two between 4 and 65536
+/// inclusive) and a block number on which it should start (or, for long periods, be shortly
+/// after the start).
+///
+/// If using `Era` in the context of `FRAME` runtime, make sure that `period`
+/// does not exceed `BlockHashCount` parameter passed to `system` module, since that
+/// prunes old blocks and renders transactions immediately invalid.
+pub fn construct_mortal_era(period: u64, current: u64) -> Era {
+    let period = period
+        .checked_next_power_of_two()
+        .unwrap_or(1 << 16)
+        .clamp(4, 1 << 16);
+    let phase = current % period;
+    let quantize_factor = (period >> 12).max(1);
+    let quantized_phase = phase / quantize_factor * quantize_factor;
+
+    Era::Mortal(period, quantized_phase)
+}
+
 impl Finalize for SpecialTypeToFill {
     type FinalForm = SpecialType;
     fn finalize(&self) -> Option<Self::FinalForm> {
         match &self {
-            SpecialTypeToFill::AccountId32(a) => a.clone().map(SpecialType::AccountId32),
+            SpecialTypeToFill::AccountId32(a) => (*a).map(SpecialType::AccountId32),
             SpecialTypeToFill::Era(a) => match a {
                 EraToFill::Immortal => Some(SpecialType::Era(Era::Immortal)),
                 EraToFill::Mortal {
-                    period: optional_period,
-                    phase: optional_phase,
-                } => {
-                    if let Some(period) = optional_period {
-                        optional_phase
-                            .as_ref()
-                            .map(|phase| SpecialType::Era(Era::Mortal(*period, *phase)))
-                    } else {
-                        None
-                    }
-                }
+                    period_entry,
+                    block_number_entry: optional_block_number_entry,
+                } => optional_block_number_entry
+                    .as_ref()
+                    .map(|block_number_entry| {
+                        SpecialType::Era(construct_mortal_era(*period_entry, *block_number_entry))
+                    }),
             },
             SpecialTypeToFill::H256 { hash, specialty: _ } => hash.map(SpecialType::H256),
             SpecialTypeToFill::PerU16 { value, is_compact } => {
@@ -303,12 +323,12 @@ impl Finalize for SpecialTypeToFill {
             SpecialTypeToFill::Perquintill { value, is_compact } => {
                 finalize_perthing_compact!(value, is_compact, Perquintill)
             }
-            SpecialTypeToFill::PublicEd25519(a) => a.clone().map(SpecialType::PublicEd25519),
-            SpecialTypeToFill::PublicSr25519(a) => a.clone().map(SpecialType::PublicSr25519),
-            SpecialTypeToFill::PublicEcdsa(a) => a.clone().map(SpecialType::PublicEcdsa),
-            SpecialTypeToFill::SignatureEd25519(a) => a.clone().map(SpecialType::SignatureEd25519),
-            SpecialTypeToFill::SignatureSr25519(a) => a.clone().map(SpecialType::SignatureSr25519),
-            SpecialTypeToFill::SignatureEcdsa(a) => a.clone().map(SpecialType::SignatureEcdsa),
+            SpecialTypeToFill::PublicEd25519(a) => (*a).map(SpecialType::PublicEd25519),
+            SpecialTypeToFill::PublicSr25519(a) => (*a).map(SpecialType::PublicSr25519),
+            SpecialTypeToFill::PublicEcdsa(a) => (*a).map(SpecialType::PublicEcdsa),
+            SpecialTypeToFill::SignatureEd25519(a) => (*a).map(SpecialType::SignatureEd25519),
+            SpecialTypeToFill::SignatureSr25519(a) => (*a).map(SpecialType::SignatureSr25519),
+            SpecialTypeToFill::SignatureEcdsa(a) => (*a).map(SpecialType::SignatureEcdsa),
         }
     }
 }
