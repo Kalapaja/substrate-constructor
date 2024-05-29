@@ -3,7 +3,10 @@ description = "Extrinsic constructor for Substrate based chains"
 license = "GPL-3.0-or-later"
 name = "substrate-constructor"
 version = "0.1.0"
-authors = ["Alexander Slesarev <slesarew@gmail.com>", "Vera Abramova <abramova.vera@gmail.com>"]
+authors = [
+    "Alexander Slesarev <slesarew@gmail.com>",
+    "Vera Abramova <abramova.vera@gmail.com>",
+]
 edition = "2021"
 repository = "https://github.com/Alzymologist/substrate-constructor"
 homepage = "https://github.com/Alzymologist/substrate-constructor"
@@ -11,16 +14,30 @@ documentation = "https://docs.rs/substrate_constructor/"
 keywords = ["parser", "substrate"]
 exclude = ["/for_tests", "/.github"]
 
+[features]
+
 [dependencies]
-bitvec = {version = "1.0.1", default-features = false, features = ["alloc"]}
-external-memory-tools = {version = "0.1.0", default-features = false}
-frame-metadata = {version = "16.0.0", default-features = false, features = ["current", "decode"]}
+bitvec = { version = "1.0.1", default-features = false, features = ["alloc"] }
+external-memory-tools = { version = "0.1.0", default-features = false }
+frame-metadata = { version = "16.0.0", default-features = false, features = [
+    "current",
+    "decode",
+] }
 hex = "0.4.3"
-num-bigint = {version = "0.4.3", default-features = false}
-parity-scale-codec = {version = "3.6.9", default-features = false, features = ["derive", "full", "bit-vec"]}
-primitive-types = {version = "0.12.2", default-features = false}
-scale-info = {version = "2.10.0", default-features = false}
-sp-arithmetic = {version = "25.0.0", default-features = false}
-sp-crypto-hashing = {version = "0.1.0", default-features = false}
-substrate-crypto-light = {git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
-substrate_parser = {git = "https://github.com/Alzymologist/substrate-parser", default-features = false}
+num-bigint = { version = "0.4.3", default-features = false }
+parity-scale-codec = { version = "3.6.9", default-features = false, features = [
+    "derive",
+    "full",
+    "bit-vec",
+] }
+primitive-types = { version = "0.12.2", default-features = false }
+scale-info = { version = "2.10.0", default-features = false }
+sp-arithmetic = { version = "25.0.0", default-features = false }
+sp-crypto-hashing = { version = "0.1.0", default-features = false }
+substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = [
+    "ecdsa",
+    "ed25519",
+    "sr25519",
+] }
+substrate_parser = { git = "https://github.com/Alzymologist/substrate-parser", default-features = false }
+thiserror = "1"
