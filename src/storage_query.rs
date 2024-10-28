@@ -17,6 +17,7 @@ use crate::finalize::{Finalize, TypeContent};
 use crate::traits::{AsFillMetadata, AsPalletMetadata};
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum EntrySelector {
     Empty,
     Functional(EntrySelectorFunctional),
@@ -140,6 +141,7 @@ pub struct StorageEntry {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StorageEntryTypeToFill {
     Plain(UntrackedSymbol<TypeId>),
     Map {
@@ -150,6 +152,7 @@ pub enum StorageEntryTypeToFill {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StorageSelector {
     Empty,
     Functional(StorageSelectorFunctional),
