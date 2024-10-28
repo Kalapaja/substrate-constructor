@@ -19,7 +19,7 @@ use substrate_parser::{
     decoding_sci::{find_bit_order_ty, husk_type, FoundBitOrder, ResolvedTy, Ty},
     error::{ExtensionsError, RegistryError, RegistryInternalError},
     propagated::{Checker, Propagated, SpecialtySet},
-    special_indicators::{SpecialtyH256, SpecialtyTypeHinted, SpecialtyUnsignedInteger},
+    special_indicators::{SignatureIndicator, SpecialtyH256, SpecialtyTypeHinted, SpecialtyUnsignedInteger},
     traits::ResolveType,
 };
 
@@ -657,12 +657,17 @@ impl TransactionToFill {
             let registry = metadata.types();
             for (i, variant) in variant_selector.available_variants.iter().enumerate() {
                 if variant.fields.len() == 1 {
-                    let ty = registry.resolve_ty(variant.fields[0].ty.id, ext_memory)?;
-                    if let SpecialtyTypeHinted::SignatureSr25519 =
-                        SpecialtyTypeHinted::from_type(&ty)
-                    {
+                    if let SignatureIndicator::Sr25519 = SignatureIndicator::from_field::<E, M>(&variant.fields[0], ext_memory, &registry) {
                         found_index = Some(i);
                         break;
+                    } else {
+                        let ty = registry.resolve_ty(variant.fields[0].ty.id, ext_memory)?;
+                        if let SpecialtyTypeHinted::SignatureSr25519 =
+                            SpecialtyTypeHinted::from_type(&ty)
+                        {
+                            found_index = Some(i);
+                            break;
+                        }
                     }
                 }
             }

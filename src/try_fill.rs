@@ -68,6 +68,7 @@ impl UnsignedToFill {
             UnsignedToFill::U128(ref mut old) => unsigned!(U128, old, source),
         }
     }
+    #[allow(irrefutable_let_patterns)]
     pub fn upd_from_rpc_u32(&mut self, source: u32) {
         match self {
             UnsignedToFill::U8(ref mut old) => rpc_u32_fit!(u8, old, source),
