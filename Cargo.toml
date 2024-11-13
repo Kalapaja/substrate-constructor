@@ -18,20 +18,20 @@ exclude = ["/for_tests", "/.github"]
 
 [dependencies]
 bitvec = { version = "1.0.1", default-features = false, features = ["alloc"] }
-external-memory-tools = { version = "0.1.0", default-features = false }
-frame-metadata = { version = "16.0.0", default-features = false, features = [
+external-memory-tools = { version = "0.1.1", default-features = false }
+frame-metadata = { version = "17.0.0", default-features = false, features = [
     "current",
     "decode",
 ] }
 hex = "0.4.3"
-num-bigint = { version = "0.4.3", default-features = false }
-parity-scale-codec = { version = "3.6.9", default-features = false, features = [
+num-bigint = { version = "0.4.6", default-features = false }
+parity-scale-codec = { version = "3.6.12", default-features = false, features = [
     "derive",
     "full",
     "bit-vec",
 ] }
-primitive-types = { version = "0.12.2", default-features = false }
-scale-info = { version = "2.10.0", default-features = false }
+primitive-types = { version = "0.13.1", default-features = false }
+scale-info = { version = "2.11.5", default-features = false }
 sp-arithmetic = { version = "26.0.0", default-features = false }
 sp-crypto-hashing = { version = "0.1.0", default-features = false }
 substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = [
@@ -40,4 +40,3 @@ substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-cryp
     "sr25519",
 ] }
 substrate_parser = { git = "https://github.com/Alzymologist/substrate-parser", default-features = false }
-thiserror = "1"

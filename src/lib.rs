@@ -1,3 +1,5 @@
+#![deny(unused_crate_dependencies)]
+
 pub mod error;
 pub mod fill_prepare;
 pub mod finalize;
