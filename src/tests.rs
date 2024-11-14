@@ -71,7 +71,7 @@ fn init_transaction_assets() {
     assert!(transaction_to_fill_test.is_ok());
     let mut transaction_to_fill = transaction_to_fill_test.unwrap();
     transaction_to_fill.try_default_tip_assets_in_given_asset(&mut (), &metadata_statemint, 1337);
-    
+
     let mut found_assets_part = false;
     let expected_hex_part = "00010002043205e514";
     let expected_part = hex::decode(expected_hex_part).unwrap();
@@ -83,7 +83,9 @@ fn init_transaction_assets() {
             break;
         }
     }
-    if !found_assets_part {panic!("Assets part did not get finalized.")}
+    if !found_assets_part {
+        panic!("Assets part did not get finalized.")
+    }
 }
 
 #[test]
