@@ -1149,7 +1149,8 @@ fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
     }
 }
 
-/// Goal is to set zero tip in same assets as are used in the asset transaction.
+/// Goal is to set zero tip in desired assets so that commission could be paid
+/// in assets as opposed to native gas.
 ///
 /// See <https://wiki.polkadot.network/docs/learn/xcm/fundamentals/multilocation-summary>
 /// for details on some of the fields meaning.
