@@ -50,7 +50,7 @@ macro_rules! unsigned {
     };
 }
 
-macro_rules! rpc_u32_fit {
+macro_rules! unsigned_fit {
     ($ty:ty, $old:tt, $source:tt) => {
         if let Ok(value) = <$ty>::try_from($source) {
             *$old = Some(value)
@@ -68,14 +68,26 @@ impl UnsignedToFill {
             UnsignedToFill::U128(ref mut old) => unsigned!(U128, old, source),
         }
     }
+
     #[allow(irrefutable_let_patterns)]
-    pub fn upd_from_rpc_u32(&mut self, source: u32) {
+    pub fn upd_from_u8(&mut self, source: u8) {
         match self {
-            UnsignedToFill::U8(ref mut old) => rpc_u32_fit!(u8, old, source),
-            UnsignedToFill::U16(ref mut old) => rpc_u32_fit!(u16, old, source),
-            UnsignedToFill::U32(ref mut old) => rpc_u32_fit!(u32, old, source),
-            UnsignedToFill::U64(ref mut old) => rpc_u32_fit!(u64, old, source),
-            UnsignedToFill::U128(ref mut old) => rpc_u32_fit!(u128, old, source),
+            UnsignedToFill::U8(ref mut old) => unsigned_fit!(u8, old, source),
+            UnsignedToFill::U16(ref mut old) => unsigned_fit!(u16, old, source),
+            UnsignedToFill::U32(ref mut old) => unsigned_fit!(u32, old, source),
+            UnsignedToFill::U64(ref mut old) => unsigned_fit!(u64, old, source),
+            UnsignedToFill::U128(ref mut old) => unsigned_fit!(u128, old, source),
+        }
+    }
+
+    #[allow(irrefutable_let_patterns)]
+    pub fn upd_from_u32(&mut self, source: u32) {
+        match self {
+            UnsignedToFill::U8(ref mut old) => unsigned_fit!(u8, old, source),
+            UnsignedToFill::U16(ref mut old) => unsigned_fit!(u16, old, source),
+            UnsignedToFill::U32(ref mut old) => unsigned_fit!(u32, old, source),
+            UnsignedToFill::U64(ref mut old) => unsigned_fit!(u64, old, source),
+            UnsignedToFill::U128(ref mut old) => unsigned_fit!(u128, old, source),
         }
     }
 }
