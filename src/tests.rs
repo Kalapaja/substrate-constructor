@@ -42,7 +42,7 @@ fn as_fill_metadata_2() {
 }
 
 #[test]
-fn init_transaction() {
+fn init_transaction_1() {
     let metadata_westend = metadata_v14("for_tests/westend9111");
     let genesis_hash_westend = H256(
         hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
@@ -58,7 +58,46 @@ fn init_transaction() {
 }
 
 #[test]
-fn init_transaction_assets() {
+fn init_transaction_2() {
+    let metadata_westend = metadata_v15("for_tests/westend1006001");
+    let genesis_hash_westend = H256(
+        hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let transaction_to_fill_test =
+        TransactionToFill::init(&mut (), &metadata_westend, genesis_hash_westend);
+    assert!(transaction_to_fill_test.is_ok());
+    let mut transaction_to_fill = transaction_to_fill_test.unwrap();
+    transaction_to_fill.populate_nonce(0);
+
+    let mock_block_hash = H256([0u8; 32]);
+    let mock_block_number = 100500u64;
+    transaction_to_fill.populate_block_info(Some(mock_block_hash), Some(mock_block_number));
+
+    for extension in transaction_to_fill.extensions.iter() {
+        let finalized_extension_result = extension.finalize();
+        assert!(
+            finalized_extension_result.is_some(),
+            "Incomplete extensions: {extension:?}"
+        );
+    }
+
+    // westend has no assets, nothing should happen here
+    transaction_to_fill.try_default_tip_assets_in_given_asset(&mut (), &metadata_westend, 1337);
+
+    for extension in transaction_to_fill.extensions.iter() {
+        let finalized_extension_result = extension.finalize();
+        assert!(
+            finalized_extension_result.is_some(),
+            "Incomplete extensions: {extension:?}"
+        );
+    }
+}
+
+#[test]
+fn init_transaction_3_assets() {
     let metadata_statemint = metadata_v14("for_tests/statemint1003003");
     let genesis_hash_statemint = H256(
         hex::decode("68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f")
@@ -70,6 +109,20 @@ fn init_transaction_assets() {
         TransactionToFill::init(&mut (), &metadata_statemint, genesis_hash_statemint);
     assert!(transaction_to_fill_test.is_ok());
     let mut transaction_to_fill = transaction_to_fill_test.unwrap();
+    transaction_to_fill.populate_nonce(0);
+
+    let mock_block_hash = H256([0u8; 32]);
+    let mock_block_number = 100500u64;
+    transaction_to_fill.populate_block_info(Some(mock_block_hash), Some(mock_block_number));
+
+    for extension in transaction_to_fill.extensions.iter() {
+        let finalized_extension_result = extension.finalize();
+        assert!(
+            finalized_extension_result.is_some(),
+            "Incomplete extensions: {extension:?}"
+        );
+    }
+
     transaction_to_fill.try_default_tip_assets_in_given_asset(&mut (), &metadata_statemint, 1337);
 
     let mut found_assets_part = false;
@@ -77,10 +130,18 @@ fn init_transaction_assets() {
     let expected_part = hex::decode(expected_hex_part).unwrap();
 
     for extension in transaction_to_fill.extensions.iter() {
-        if extension.info[0].path.ident() == Some("ChargeAssetTxPayment".to_string()) {
-            assert_eq!(extension.finalize().unwrap().encode(), expected_part);
-            found_assets_part = true;
-            break;
+        let finalized_extension_result = extension.finalize();
+        assert!(
+            finalized_extension_result.is_some(),
+            "Incomplete extensions: {extension:?}"
+        );
+        if let Some(first_info_entry) = extension.info.first() {
+            if let Some(ident) = first_info_entry.path.ident() {
+                if ident == "ChargeAssetTxPayment" {
+                    assert_eq!(finalized_extension_result.unwrap().encode(), expected_part);
+                    found_assets_part = true;
+                }
+            }
         }
     }
     if !found_assets_part {
