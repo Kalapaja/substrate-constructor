@@ -605,7 +605,7 @@ impl TransactionToFill {
         if let Some(tx_version) = &metadata.defined_tx_version() {
             out.populate_tx_version(tx_version)
         }
-        out.try_default_tip::<E, M>(ext_memory, &registry);
+        out.try_default_tip();
         out.try_default_signature_to_sr25519(ext_memory, metadata)
             .map_err(ErrorFixMe::Registry)?;
         Ok(out)
@@ -626,16 +626,12 @@ impl TransactionToFill {
         }
     }
 
-    pub fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
-        &mut self,
-        ext_memory: &mut E,
-        registry: &M::TypeRegistry,
-    ) {
+    pub fn try_default_tip(&mut self) {
         for extension in self.extensions.iter_mut() {
-            try_default_tip::<E, M>(&mut extension.content, ext_memory, registry);
+            try_default_tip(&mut extension.content);
             if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
                 for field in fields_to_fill.iter_mut() {
-                    try_default_tip::<E, M>(&mut field.type_to_fill.content, ext_memory, registry);
+                    try_default_tip(&mut field.type_to_fill.content);
                 }
             }
         }
@@ -659,22 +655,43 @@ impl TransactionToFill {
             let registry = metadata.types();
 
             for extension in self.extensions.iter_mut() {
-                try_default_tip_assets_in_given_asset::<E, M>(
-                    &mut extension.content,
-                    ext_memory,
-                    &registry,
-                    known_asset_id,
-                    pallet_assets_id,
-                );
+                // extension is a primitive here, can only set tip to zero
+                try_default_tip(&mut extension.content);
                 if let TypeContentToFill::Composite(ref mut fields_to_fill) = extension.content {
-                    for field in fields_to_fill.iter_mut() {
-                        try_default_tip_assets_in_given_asset::<E, M>(
-                            &mut field.type_to_fill.content,
-                            ext_memory,
-                            &registry,
-                            known_asset_id,
-                            pallet_assets_id,
-                        );
+                    // extension is a composite and could contain a tip with primitive part and a descriptor for asset gas setup
+                    // ..or may not be a tip extension at all
+                    let mut has_tip_related_field = false;
+                    for field in fields_to_fill.iter() {
+                        match &field.type_to_fill.content {
+                            TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                                specialty_unsigned_to_fill,
+                            )) => {
+                                has_tip_related_field = specialty_unsigned_to_fill.specialty
+                                    == SpecialtyUnsignedInteger::TipAsset;
+                            }
+                            TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                                specialty_unsigned_to_fill,
+                            )) => {
+                                has_tip_related_field = specialty_unsigned_to_fill.specialty
+                                    == SpecialtyUnsignedInteger::TipAsset;
+                            }
+                            _ => {}
+                        }
+                        if has_tip_related_field {
+                            break;
+                        }
+                    }
+                    // setup happens only for composites with a tip-related primitive field
+                    if has_tip_related_field {
+                        for field in fields_to_fill.iter_mut() {
+                            try_default_tip_assets_in_given_asset::<E, M>(
+                                &mut field.type_to_fill.content,
+                                ext_memory,
+                                &registry,
+                                known_asset_id,
+                                pallet_assets_id,
+                            );
+                        }
                     }
                 }
             }
@@ -1100,11 +1117,7 @@ fn nonce_got_filled(content: &mut TypeContentToFill, rpc_u32: u32) -> bool {
     }
 }
 
-fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
-    content: &mut TypeContentToFill,
-    ext_memory: &mut E,
-    registry: &M::TypeRegistry,
-) {
+fn try_default_tip(content: &mut TypeContentToFill) {
     match content {
         TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
             ref mut specialty_unsigned_to_fill,
@@ -1122,27 +1135,6 @@ fn try_default_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
                 || specialty_unsigned_to_fill.specialty == SpecialtyUnsignedInteger::TipAsset
             {
                 specialty_unsigned_to_fill.content.upd_from_str("0");
-            }
-        }
-        TypeContentToFill::Variant(ref mut variant_selector) => {
-            let mut index_of_none = None;
-
-            for (index, variant) in variant_selector.available_variants.iter().enumerate() {
-                if variant.name == "None" {
-                    index_of_none = Some(index);
-                    break;
-                }
-            }
-
-            if let Some(index) = index_of_none {
-                if let Ok(new_variant_selector) = VariantSelector::new_at::<E, M>(
-                    &variant_selector.available_variants,
-                    ext_memory,
-                    registry,
-                    index,
-                ) {
-                    *variant_selector = new_variant_selector;
-                }
             }
         }
         _ => {}
