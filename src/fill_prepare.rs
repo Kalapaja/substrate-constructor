@@ -290,8 +290,6 @@ pub struct ArrayU8ToFill {
 pub struct ArrayRegularToFill {
     pub content: Vec<TypeContentToFill>,
     pub info_element: Vec<Info>,
-    pub ty: Type<PortableForm>,
-    pub id: u32,
     pub len: u32,
 }
 
@@ -1210,146 +1208,13 @@ fn try_default_tip_assets_in_given_asset<E: ExternalMemory, M: AsFillMetadata<E>
                                                 ref mut variant_selector_interior,
                                             ) = field_to_fill.type_to_fill.content
                                             {
-                                                // search for index of `X2` variant here; `X2` means 2 junctions in asset address
-                                                let mut index_of_x2 = None;
-
-                                                for (index, variant) in variant_selector_interior
-                                                    .available_variants
-                                                    .iter()
-                                                    .enumerate()
-                                                {
-                                                    if variant.name == "X2" {
-                                                        index_of_x2 = Some(index);
-                                                        break;
-                                                    }
-                                                }
-
-                                                if let Some(index_x2) = index_of_x2 {
-                                                    if let Ok(new_variant_selector_interior) =
-                                                        VariantSelector::new_at::<E, M>(
-                                                            &variant_selector_interior
-                                                                .available_variants,
-                                                            ext_memory,
-                                                            registry,
-                                                            index_x2,
-                                                        )
-                                                    {
-                                                        *variant_selector_interior =
-                                                            new_variant_selector_interior;
-                                                        if variant_selector_interior
-                                                            .selected
-                                                            .fields_to_fill
-                                                            .len()
-                                                            == 2
-                                                        {
-                                                            if let TypeContentToFill::Variant(
-                                                                ref mut junction_variant_selector_0,
-                                                            ) = variant_selector_interior
-                                                                .selected
-                                                                .fields_to_fill[0]
-                                                                .type_to_fill
-                                                                .content
-                                                            {
-                                                                let mut index_pallet_instance =
-                                                                    None;
-                                                                for (index, variant) in
-                                                                    junction_variant_selector_0
-                                                                        .available_variants
-                                                                        .iter()
-                                                                        .enumerate()
-                                                                {
-                                                                    if variant.name
-                                                                        == "PalletInstance"
-                                                                    {
-                                                                        index_pallet_instance =
-                                                                            Some(index);
-                                                                        break;
-                                                                    }
-                                                                }
-                                                                if let Some(index_pallet_instance) =
-                                                                    index_pallet_instance
-                                                                {
-                                                                    if let Ok(
-                                                                    new_junction_variant_selector_0,
-                                                                ) = VariantSelector::new_at::<E, M>(
-                                                                    &junction_variant_selector_0
-                                                                        .available_variants,
-                                                                    ext_memory,
-                                                                    registry,
-                                                                    index_pallet_instance,
-                                                                ) {
-                                                                    *junction_variant_selector_0 =
-                                                                        new_junction_variant_selector_0;
-                                                                    if junction_variant_selector_0
-                                                                        .selected
-                                                                        .fields_to_fill
-                                                                        .len()
-                                                                        == 1
-                                                                    {
-                                                                        if let TypeContentToFill::Primitive(
-                                                                            PrimitiveToFill::Unsigned(ref mut specialty_unsigned_to_fill)
-                                                                        ) = junction_variant_selector_0.selected.fields_to_fill[0].type_to_fill.content {
-                                                                            specialty_unsigned_to_fill.content.upd_from_u8(pallet_assets_id)
-                                                                        }
-                                                                    }
-                                                                }
-                                                                }
-                                                            }
-                                                            if let TypeContentToFill::Variant(
-                                                                ref mut junction_variant_selector_1,
-                                                            ) = variant_selector_interior
-                                                                .selected
-                                                                .fields_to_fill[1]
-                                                                .type_to_fill
-                                                                .content
-                                                            {
-                                                                let mut index_general_index = None;
-                                                                for (index, variant) in
-                                                                    junction_variant_selector_1
-                                                                        .available_variants
-                                                                        .iter()
-                                                                        .enumerate()
-                                                                {
-                                                                    if variant.name
-                                                                        == "GeneralIndex"
-                                                                    {
-                                                                        index_general_index =
-                                                                            Some(index);
-                                                                        break;
-                                                                    }
-                                                                }
-                                                                if let Some(index_general_index) =
-                                                                    index_general_index
-                                                                {
-                                                                    if let Ok(
-                                                                    new_junction_variant_selector_1,
-                                                                ) = VariantSelector::new_at::<E, M>(
-                                                                    &junction_variant_selector_1
-                                                                        .available_variants,
-                                                                    ext_memory,
-                                                                    registry,
-                                                                    index_general_index,
-                                                                ) {
-                                                                    *junction_variant_selector_1 =
-                                                                        new_junction_variant_selector_1;
-                                                                    if junction_variant_selector_1
-                                                                        .selected
-                                                                        .fields_to_fill
-                                                                        .len()
-                                                                        == 1
-                                                                    {
-                                                                        match junction_variant_selector_1.selected.fields_to_fill[0].type_to_fill.content {
-                                                                            TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(ref mut specialty_unsigned_to_fill)) => specialty_unsigned_to_fill.content.upd_from_u32(asset_id),
-                                                                            TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(ref mut specialty_unsigned_to_fill)) => specialty_unsigned_to_fill.content.upd_from_u32(asset_id),
-                                                                            _ => {},
-                                                                        }
-                                                                    }
-                                                                }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                                default_x2_junctions_assets_tip::<E, M>(
+                                                    variant_selector_interior,
+                                                    ext_memory,
+                                                    registry,
+                                                    asset_id,
+                                                    pallet_assets_id,
+                                                )
                                             }
                                         }
                                         _ => {}
@@ -1362,6 +1227,173 @@ fn try_default_tip_assets_in_given_asset<E: ExternalMemory, M: AsFillMetadata<E>
             }
         }
         _ => {}
+    }
+}
+
+fn autofill_x2_selector_pallet_instance<E: ExternalMemory, M: AsFillMetadata<E>>(
+    selector0: &mut TypeContentToFill,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+    pallet_assets_id: u8,
+) {
+    if let TypeContentToFill::Variant(ref mut junction_variant_selector_0) = selector0 {
+        let mut index_pallet_instance = None;
+        for (index, variant) in junction_variant_selector_0
+            .available_variants
+            .iter()
+            .enumerate()
+        {
+            if variant.name == "PalletInstance" {
+                index_pallet_instance = Some(index);
+                break;
+            }
+        }
+        if let Some(index_pallet_instance) = index_pallet_instance {
+            if let Ok(new_junction_variant_selector_0) = VariantSelector::new_at::<E, M>(
+                &junction_variant_selector_0.available_variants,
+                ext_memory,
+                registry,
+                index_pallet_instance,
+            ) {
+                *junction_variant_selector_0 = new_junction_variant_selector_0;
+                if junction_variant_selector_0.selected.fields_to_fill.len() == 1 {
+                    if let TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                        ref mut specialty_unsigned_to_fill,
+                    )) = junction_variant_selector_0.selected.fields_to_fill[0]
+                        .type_to_fill
+                        .content
+                    {
+                        specialty_unsigned_to_fill
+                            .content
+                            .upd_from_u8(pallet_assets_id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn autofill_x2_selector_general_index<E: ExternalMemory, M: AsFillMetadata<E>>(
+    selector1: &mut TypeContentToFill,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+    asset_id: u32,
+) {
+    if let TypeContentToFill::Variant(ref mut junction_variant_selector_1) = selector1 {
+        let mut index_general_index = None;
+        for (index, variant) in junction_variant_selector_1
+            .available_variants
+            .iter()
+            .enumerate()
+        {
+            if variant.name == "GeneralIndex" {
+                index_general_index = Some(index);
+                break;
+            }
+        }
+        if let Some(index_general_index) = index_general_index {
+            if let Ok(new_junction_variant_selector_1) = VariantSelector::new_at::<E, M>(
+                &junction_variant_selector_1.available_variants,
+                ext_memory,
+                registry,
+                index_general_index,
+            ) {
+                *junction_variant_selector_1 = new_junction_variant_selector_1;
+                if junction_variant_selector_1.selected.fields_to_fill.len() == 1 {
+                    match junction_variant_selector_1.selected.fields_to_fill[0]
+                        .type_to_fill
+                        .content
+                    {
+                        TypeContentToFill::Primitive(PrimitiveToFill::Unsigned(
+                            ref mut specialty_unsigned_to_fill,
+                        )) => specialty_unsigned_to_fill.content.upd_from_u32(asset_id),
+                        TypeContentToFill::Primitive(PrimitiveToFill::CompactUnsigned(
+                            ref mut specialty_unsigned_to_fill,
+                        )) => specialty_unsigned_to_fill.content.upd_from_u32(asset_id),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn default_x2_junctions_assets_tip<E: ExternalMemory, M: AsFillMetadata<E>>(
+    variant_selector_interior: &mut VariantSelector,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+    asset_id: u32,
+    pallet_assets_id: u8,
+) {
+    // search for index of `X2` variant here; `X2` means 2 junctions in asset address
+    let mut index_of_x2 = None;
+
+    for (index, variant) in variant_selector_interior
+        .available_variants
+        .iter()
+        .enumerate()
+    {
+        if variant.name == "X2" {
+            index_of_x2 = Some(index);
+            break;
+        }
+    }
+
+    if let Some(index_x2) = index_of_x2 {
+        if let Ok(new_variant_selector_interior) = VariantSelector::new_at::<E, M>(
+            &variant_selector_interior.available_variants,
+            ext_memory,
+            registry,
+            index_x2,
+        ) {
+            *variant_selector_interior = new_variant_selector_interior;
+            match variant_selector_interior.selected.fields_to_fill.len() {
+                1 => {
+                    // must be an array of variants, of length 2
+                    if let TypeContentToFill::ArrayRegular(ref mut array) =
+                        variant_selector_interior.selected.fields_to_fill[0]
+                            .type_to_fill
+                            .content
+                    {
+                        // check that length is indeed 2
+                        if array.len == 2 {
+                            autofill_x2_selector_pallet_instance::<E, M>(
+                                &mut array.content[0],
+                                ext_memory,
+                                registry,
+                                pallet_assets_id,
+                            );
+                            autofill_x2_selector_general_index::<E, M>(
+                                &mut array.content[1],
+                                ext_memory,
+                                registry,
+                                asset_id,
+                            );
+                        }
+                    }
+                }
+                2 => {
+                    // must be two variants fields
+                    autofill_x2_selector_pallet_instance::<E, M>(
+                        &mut variant_selector_interior.selected.fields_to_fill[0]
+                            .type_to_fill
+                            .content,
+                        ext_memory,
+                        registry,
+                        pallet_assets_id,
+                    );
+                    autofill_x2_selector_general_index::<E, M>(
+                        &mut variant_selector_interior.selected.fields_to_fill[1]
+                            .type_to_fill
+                            .content,
+                        ext_memory,
+                        registry,
+                        asset_id,
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -1702,16 +1734,22 @@ where
                         }),
                         info,
                     }),
-                    SequenceDraft::Regular(sequence_draft_content) => Ok(TypeToFill {
-                        content: TypeContentToFill::ArrayRegular(ArrayRegularToFill {
-                            content: Vec::new(),
-                            info_element: sequence_draft_content.info_element,
-                            ty: sequence_draft_content.resolved_ty.ty,
-                            id: sequence_draft_content.resolved_ty.id,
-                            len: x.len,
-                        }),
-                        info,
-                    }),
+                    SequenceDraft::Regular(sequence_draft_content) => {
+                        let array_element = prepare_type::<E, M>(
+                            &Ty::Resolved(sequence_draft_content.resolved_ty),
+                            ext_memory,
+                            registry,
+                            Propagated::new(),
+                        )?;
+                        Ok(TypeToFill {
+                            content: TypeContentToFill::ArrayRegular(ArrayRegularToFill {
+                                content: vec![array_element.content; x.len as usize],
+                                info_element: sequence_draft_content.info_element,
+                                len: x.len,
+                            }),
+                            info,
+                        })
+                    }
                 }
             }
             TypeDef::Tuple(x) => {
