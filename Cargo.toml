@@ -2,7 +2,7 @@
 description = "Extrinsic constructor for Substrate based chains"
 license = "GPL-3.0-or-later"
 name = "substrate-constructor"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     "Alexander Slesarev <slesarew@gmail.com>",
     "Vera Abramova <abramova.vera@gmail.com>",
@@ -34,9 +34,9 @@ primitive-types = { version = "0.13.1", default-features = false }
 scale-info = { version = "2.11.5", default-features = false }
 sp-arithmetic = { version = "26.0.0", default-features = false }
 sp-crypto-hashing = { version = "0.1.0", default-features = false }
-substrate-crypto-light = { git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = [
+substrate-crypto-light = { version = "0.1.0", default-features = false, features = [
     "ecdsa",
     "ed25519",
     "sr25519",
 ] }
-substrate_parser = { git = "https://github.com/Alzymologist/substrate-parser", default-features = false }
+substrate_parser = { version = "0.7.0", default-features = false }
