@@ -11,4 +11,5 @@ Features:
 Bugfixes:
 
 - 'u32' nonce
+- Array construction with correct number of elements
 
